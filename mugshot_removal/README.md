@@ -51,12 +51,25 @@ python main.py draft --client-name "Jane Public" --client-contact "jane@example.
   --booking-date "2026-08-19" --arresting-agency "Palm Beach County Sheriff's Office"
 ```
 
+**Before sending anything real**, get the client's written authorization to
+send from their name/email. Generate the form:
+```
+python main.py consent-form --client-name "Jane Public" \
+  --client-email "jane@example.com" \
+  --target-url "https://example-mugshot-site.com/jane-public" \
+  --state FL
+```
+Have the client sign and return it, and keep it on file. `send` will not
+run without `--consent-date` set to the date they actually signed it — a
+future or garbage date is rejected outright, not just logged.
+
 Send it and log to a tracker sheet:
 ```
 python main.py send --client-name "Jane Public" --client-email "jane@example.com" \
   --target-url "https://example-mugshot-site.com/jane-public" \
   --to-email "abuse@example-mugshot-site.com" \
   --state FL \
+  --consent-date "2026-08-25" \
   --booking-date "2026-08-19" --arresting-agency "Palm Beach County Sheriff's Office" \
   --smtp-host smtp.gmail.com --smtp-port 465 \
   --smtp-username jane@example.com --smtp-password APP_PASSWORD \
@@ -84,6 +97,9 @@ python main.py lookup-owner --target-url "https://example-mugshot-site.com/jane-
 
 - Each letter is the client's own request, in their own name — this tool
   doesn't send correspondence asserting representation of the client.
+- `send` is gated on a recorded, past-dated consent date; it will not send
+  without one.
 - No claim of copyright ownership over the photograph is made anywhere in
-  the letter; the basis is the client's own right under § 901.43.
+  the letter; the basis is the client's own right under the applicable
+  statute.
 - Finding pages uses Google's Custom Search API, not scraped search results.

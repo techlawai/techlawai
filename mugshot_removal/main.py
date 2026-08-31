@@ -3,6 +3,9 @@
 import argparse
 import json
 
+from datetime import date
+
+from consent import generate_consent_form, validate_consent_date
 from draft import generate_letter
 from owner_lookup import full_lookup
 from search import find_mugshot_pages
@@ -29,6 +32,19 @@ def cmd_draft(args):
 
 
 def cmd_send(args):
+    # Refuse to send without a recorded consent date -- this is the
+    # enforcement point for "get written permission and keep it on file"
+    # rather than something left to operator memory.
+    try:
+        consent_date = validate_consent_date(args.consent_date)
+    except ValueError as e:
+        raise SystemExit(
+            f"Refusing to send: {e}\n"
+            f"--consent-date must be the date the client actually signed/returned "
+            f"their authorization (see `consent-form` command). Not today's date "
+            f"unless that's genuinely when they signed it."
+        )
+
     letter = generate_letter(
         client_name=args.client_name,
         client_contact=args.client_email,
@@ -52,8 +68,13 @@ def cmd_send(args):
         statute = get_statute(args.state)
         ws = open_tracker(args.sheet_id, args.creds)
         log_request(ws, args.client_name, args.state, args.target_url, args.to_email,
-                    deadline_days=statute["removal_deadline_days"])
+                    consent_date=consent_date, deadline_days=statute["removal_deadline_days"])
         print("Logged to tracker sheet.")
+
+
+def cmd_consent_form(args):
+    statute = get_statute(args.state)
+    print(generate_consent_form(args.client_name, args.client_email, args.target_url, statute["citation"]))
 
 
 def cmd_check_overdue(args):
@@ -108,7 +129,18 @@ def main():
     p_send.add_argument("--smtp-password", required=True)
     p_send.add_argument("--sheet-id", default=None, help="Optional: log to tracker sheet")
     p_send.add_argument("--creds", default="service_account.json")
+    p_send.add_argument(
+        "--consent-date", required=True,
+        help="Date (YYYY-MM-DD) the client actually signed/returned their written authorization. Required.",
+    )
     p_send.set_defaults(func=cmd_send)
+
+    p_consent = sub.add_parser("consent-form", help="Generate the client authorization form to send/sign before any real request")
+    p_consent.add_argument("--client-name", required=True)
+    p_consent.add_argument("--client-email", required=True)
+    p_consent.add_argument("--target-url", required=True)
+    p_consent.add_argument("--state", default="FL")
+    p_consent.set_defaults(func=cmd_consent_form)
 
     p_overdue = sub.add_parser(
         "check-overdue",

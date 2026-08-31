@@ -12,6 +12,7 @@ HEADER = [
     "State",
     "Target URL",
     "Contact Email",
+    "Consent Date",
     "Request Sent Date",
     "Deadline",
     "Status",
@@ -39,8 +40,10 @@ def open_tracker(sheet_id: str, creds_path: str, worksheet_name: str = "Removal 
 
 
 def log_request(ws, client_name: str, state: str, target_url: str, contact_email: str,
-                 deadline_days: int | None, sent_date: date | None = None,
+                 consent_date: date, deadline_days: int | None, sent_date: date | None = None,
                  status: str = "Pending", notes: str = ""):
+    """consent_date is required: a request must not be logged (or sent --
+    see main.py) without a recorded date the client authorized it."""
     sent_date = sent_date or date.today()
     deadline = (sent_date + timedelta(days=deadline_days)).isoformat() if deadline_days else "N/A (verify statute)"
     ws.append_row([
@@ -48,6 +51,7 @@ def log_request(ws, client_name: str, state: str, target_url: str, contact_email
         state,
         target_url,
         contact_email,
+        consent_date.isoformat(),
         sent_date.isoformat(),
         deadline,
         status,
@@ -89,7 +93,7 @@ def record_owner_info(ws, target_url: str, lookup_result: dict):
         return False
 
     row = cell.row
-    ws.update(range_name=f"I{row}:N{row}", values=[[
+    ws.update(range_name=f"J{row}:O{row}", values=[[
         domain_info.get("registrant_org") or "",
         domain_info.get("registrant_name") or "",
         domain_info.get("registrant_email") or "",
