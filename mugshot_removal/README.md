@@ -50,14 +50,22 @@ python main.py send --client-name "Jane Public" --client-email "jane@example.com
   --sheet-id YOUR_SHEET_ID
 ```
 
-Check which requests are past their 10-day deadline with no removal:
+Check which requests are past their 10-day deadline with no removal —
+this also looks up each overdue site's domain registrant and hosting
+provider (WHOIS + IP RDAP) and writes that into the tracker sheet:
 ```
 python main.py check-overdue --sheet-id YOUR_SHEET_ID
 ```
 That's the point at which Fla. Stat. § 901.43 lets the client seek an
 injunction, a $1,000/day penalty, and attorney fees — that step itself
-still needs an actual attorney to file, this tool just tells you when a
-given request has crossed that line.
+still needs an actual attorney to file. This tool's job stops at handing
+that attorney the request's overdue status plus who to name/contact
+(registrant and hosting org, where WHOIS/RDAP data isn't privacy-shielded).
+
+Look up registrant/hosting info for a single URL directly:
+```
+python main.py lookup-owner --target-url "https://example-mugshot-site.com/jane-public"
+```
 
 ## Scope
 
