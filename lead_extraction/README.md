@@ -27,26 +27,21 @@ Batch, from a JSON file (list of case objects, same fields as below):
 Single case via flags:
 
     python extract.py --sheet-id <SHEET_ID> \
-      --full-name "Jane Q Public" \
-      --address "" \
+      --first-name "Jane" \
+      --last-name "Public" \
       --charge "DUI - Unlawful Blood Alcohol Level" \
-      --statute "316.193(1)" \
-      --case-number "2026CF012345" \
-      --arrest-date "2026-08-19" \
-      --offense-date "2026-08-19" \
-      --filing-date "2026-08-31" \
-      --case-status "Open"
+      --phone-number "" \
+      --address "" \
+      --arrest-date "2026-08-19"
 
 ## Fields
 
-Full Name, Address, Charge, Statute, Case Number, Arrest Date, Offense Date,
-Filing Date, Case Status. Leave Address blank if it isn't present on the case
-you're looking at — it often isn't at the Case Info / Party Names level.
+First Name, Last Name, Charge, Phone Number, Address, Arrest Date. Leave any
+field blank if it isn't present on the case/document you're looking at.
 
 ## Scope
 
-- No field for phone number. It isn't collected by this tool.
-- This tool only writes what you give it — it does not visit eCaseView, so it
-  carries none of the site's Terms of Use restrictions on automated/bulk
-  access itself. You are still bound by those terms in how you use the site
-  to gather the input.
+This tool only writes what you give it — it does not visit eCaseView, so it
+carries none of the site's Terms of Use restrictions on automated/bulk access
+itself. You are still bound by those terms in how you use the site to gather
+the input.

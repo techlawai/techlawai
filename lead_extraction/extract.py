@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Append case leads (name/address/charge/case number/dates) to a Google Sheet.
+"""Append case leads to a Google Sheet.
 
 This script does not fetch anything from eCaseView or any other website. You
 look up a case yourself and feed its fields in here, either interactively,
@@ -18,27 +18,21 @@ SCOPES = [
 ]
 
 HEADER = [
-    "Full Name",
-    "Address",
+    "First Name",
+    "Last Name",
     "Charge",
-    "Statute",
-    "Case Number",
+    "Phone Number",
+    "Address",
     "Arrest Date",
-    "Offense Date",
-    "Filing Date",
-    "Case Status",
 ]
 
 FIELD_KEYS = [
-    "full_name",
-    "address",
+    "first_name",
+    "last_name",
     "charge",
-    "statute",
-    "case_number",
+    "phone_number",
+    "address",
     "arrest_date",
-    "offense_date",
-    "filing_date",
-    "case_status",
 ]
 
 
@@ -63,15 +57,12 @@ def prompt_for_case() -> dict:
     print("Enter case details (leave blank and press Enter to skip a field):")
     case = {}
     prompts = [
-        ("full_name", "Full Name"),
-        ("address", "Address"),
+        ("first_name", "First Name"),
+        ("last_name", "Last Name"),
         ("charge", "Charge"),
-        ("statute", "Statute"),
-        ("case_number", "Case Number"),
+        ("phone_number", "Phone Number"),
+        ("address", "Address"),
         ("arrest_date", "Arrest Date"),
-        ("offense_date", "Offense Date"),
-        ("filing_date", "Filing Date"),
-        ("case_status", "Case Status"),
     ]
     for key, label in prompts:
         case[key] = input(f"  {label}: ").strip()
@@ -85,15 +76,12 @@ def main():
     parser.add_argument("--creds", default="service_account.json", help="Path to service account JSON key")
     parser.add_argument("--interactive", action="store_true", help="Prompt for one case at a time")
     parser.add_argument("--json-file", help="Path to a JSON file containing a list of case objects")
-    parser.add_argument("--full-name")
-    parser.add_argument("--address", default="")
+    parser.add_argument("--first-name")
+    parser.add_argument("--last-name")
     parser.add_argument("--charge")
-    parser.add_argument("--statute", default="")
-    parser.add_argument("--case-number")
+    parser.add_argument("--phone-number", default="")
+    parser.add_argument("--address", default="")
     parser.add_argument("--arrest-date", default="")
-    parser.add_argument("--offense-date", default="")
-    parser.add_argument("--filing-date", default="")
-    parser.add_argument("--case-status", default="")
     args = parser.parse_args()
 
     ws = open_sheet(args.sheet_id, args.creds, args.worksheet)
@@ -113,21 +101,18 @@ def main():
             cases = json.load(f)
         for case in cases:
             rows_to_add.append(case_to_row(case))
-    elif args.full_name and args.charge and args.case_number:
+    elif args.first_name and args.last_name and args.charge:
         case = {
-            "full_name": args.full_name,
-            "address": args.address,
+            "first_name": args.first_name,
+            "last_name": args.last_name,
             "charge": args.charge,
-            "statute": args.statute,
-            "case_number": args.case_number,
+            "phone_number": args.phone_number,
+            "address": args.address,
             "arrest_date": args.arrest_date,
-            "offense_date": args.offense_date,
-            "filing_date": args.filing_date,
-            "case_status": args.case_status,
         }
         rows_to_add.append(case_to_row(case))
     else:
-        parser.error("Provide --interactive, --json-file, or at minimum --full-name/--charge/--case-number")
+        parser.error("Provide --interactive, --json-file, or at minimum --first-name/--last-name/--charge")
 
     if not rows_to_add:
         print("Nothing to add.")
