@@ -1,9 +1,20 @@
-# Mugshot Removal Tool (Fla. Stat. § 901.43)
+# Mugshot Removal Tool (multi-state)
 
-Search, draft, send, and track booking-photo removal requests. Each request
-is generated and sent as the client's own first-person statutory request
-(the client is the "From" address and the signer) — not as a third party
-representing them.
+Search, draft, send, and track booking-photo removal requests across states
+with a fee-prohibition/removal statute. Each request is generated and sent
+as the client's own first-person statutory request (the client is the
+"From" address and the signer) — not as a third party representing them.
+
+## Supported states
+
+See `statutes.py`. Each entry is either `"verified"` (citation, deadline,
+and penalty all confirmed) or `"partial"` (citation and fee-prohibition
+confirmed; deadline/penalty not confirmed and left blank rather than
+guessed — the generated letter says so explicitly and asks the operator to
+verify current statutory text before sending). Currently: FL (verified),
+CA, TX, GA, UT, OR, CO, IL, WY (partial). Run `python main.py list-states`
+for the full data. Adding a new state means adding a real, sourced entry to
+`statutes.py` — not extrapolating from another state's numbers.
 
 ## Setup
 
@@ -32,10 +43,11 @@ Find candidate pages:
 python main.py search --client-name "Jane Public" --api-key KEY --cx CX_ID
 ```
 
-Preview a letter without sending:
+Preview a letter without sending (defaults to `--state FL`):
 ```
 python main.py draft --client-name "Jane Public" --client-contact "jane@example.com" \
   --target-url "https://example-mugshot-site.com/jane-public" \
+  --state FL \
   --booking-date "2026-08-19" --arresting-agency "Palm Beach County Sheriff's Office"
 ```
 
@@ -44,6 +56,7 @@ Send it and log to a tracker sheet:
 python main.py send --client-name "Jane Public" --client-email "jane@example.com" \
   --target-url "https://example-mugshot-site.com/jane-public" \
   --to-email "abuse@example-mugshot-site.com" \
+  --state FL \
   --booking-date "2026-08-19" --arresting-agency "Palm Beach County Sheriff's Office" \
   --smtp-host smtp.gmail.com --smtp-port 465 \
   --smtp-username jane@example.com --smtp-password APP_PASSWORD \

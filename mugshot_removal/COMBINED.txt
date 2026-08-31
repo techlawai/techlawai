@@ -4,12 +4,23 @@
 FILE: README.md
 ==============================================================
 
-# Mugshot Removal Tool (Fla. Stat. § 901.43)
+# Mugshot Removal Tool (multi-state)
 
-Search, draft, send, and track booking-photo removal requests. Each request
-is generated and sent as the client's own first-person statutory request
-(the client is the "From" address and the signer) — not as a third party
-representing them.
+Search, draft, send, and track booking-photo removal requests across states
+with a fee-prohibition/removal statute. Each request is generated and sent
+as the client's own first-person statutory request (the client is the
+"From" address and the signer) — not as a third party representing them.
+
+## Supported states
+
+See `statutes.py`. Each entry is either `"verified"` (citation, deadline,
+and penalty all confirmed) or `"partial"` (citation and fee-prohibition
+confirmed; deadline/penalty not confirmed and left blank rather than
+guessed — the generated letter says so explicitly and asks the operator to
+verify current statutory text before sending). Currently: FL (verified),
+CA, TX, GA, UT, OR, CO, IL, WY (partial). Run `python main.py list-states`
+for the full data. Adding a new state means adding a real, sourced entry to
+`statutes.py` — not extrapolating from another state's numbers.
 
 ## Setup
 
@@ -38,10 +49,11 @@ Find candidate pages:
 python main.py search --client-name "Jane Public" --api-key KEY --cx CX_ID
 ```
 
-Preview a letter without sending:
+Preview a letter without sending (defaults to `--state FL`):
 ```
 python main.py draft --client-name "Jane Public" --client-contact "jane@example.com" \
   --target-url "https://example-mugshot-site.com/jane-public" \
+  --state FL \
   --booking-date "2026-08-19" --arresting-agency "Palm Beach County Sheriff's Office"
 ```
 
@@ -50,6 +62,7 @@ Send it and log to a tracker sheet:
 python main.py send --client-name "Jane Public" --client-email "jane@example.com" \
   --target-url "https://example-mugshot-site.com/jane-public" \
   --to-email "abuse@example-mugshot-site.com" \
+  --state FL \
   --booking-date "2026-08-19" --arresting-agency "Palm Beach County Sheriff's Office" \
   --smtp-host smtp.gmail.com --smtp-port 465 \
   --smtp-username jane@example.com --smtp-password APP_PASSWORD \
@@ -90,6 +103,111 @@ gspread>=6.0.0
 google-auth>=2.28.0
 python-whois>=0.9.4
 ipwhois>=1.2.0
+
+==============================================================
+FILE: statutes.py
+==============================================================
+
+"""State-by-state booking-photograph removal statutes.
+
+Only includes fields actually confirmed via research for this build. Where a
+removal deadline or penalty wasn't confirmed, it's left as None rather than
+guessed -- a demand letter citing a wrong number is worse than one that
+cites the statute correctly and states the request without a fabricated
+figure. VERIFY current statutory text before relying on any entry here for
+real correspondence; state legislatures amend and renumber these regularly.
+
+confidence:
+  "verified"   -> citation, deadline, and penalty confirmed from research
+  "partial"    -> citation and fee-prohibition confirmed; deadline/penalty
+                  not confirmed, left as None
+"""
+
+STATE_STATUTES = {
+    "FL": {
+        "name": "Florida",
+        "citation": "Fla. Stat. § 901.43",
+        "fee_prohibited": True,
+        "removal_deadline_days": 10,
+        "penalty_description": "civil penalty up to $1,000/day of noncompliance with an injunction, plus attorney fees and costs",
+        "confidence": "verified",
+    },
+    "CA": {
+        "name": "California",
+        "citation": "Cal. Civ. Code § 1798.91.1",
+        "fee_prohibited": True,
+        "removal_deadline_days": None,
+        "penalty_description": None,
+        "confidence": "partial",
+    },
+    "TX": {
+        "name": "Texas",
+        "citation": "Tex. Bus. & Com. Code ch. 109",
+        "fee_prohibited": True,
+        "removal_deadline_days": 45,
+        "penalty_description": "civil action for noncompliance; damages and other legal remedies per statute",
+        "confidence": "partial",
+    },
+    "GA": {
+        "name": "Georgia",
+        "citation": "O.C.G.A. § 35-1-19 (HB 845)",
+        "fee_prohibited": True,
+        "removal_deadline_days": None,
+        "penalty_description": None,
+        "confidence": "partial",
+    },
+    "UT": {
+        "name": "Utah",
+        "citation": "Utah Code § 17-22-30",
+        "fee_prohibited": True,
+        "removal_deadline_days": None,
+        "penalty_description": None,
+        "confidence": "partial",
+    },
+    "OR": {
+        "name": "Oregon",
+        "citation": "Or. Rev. Stat. § 30.835",
+        "fee_prohibited": True,
+        "removal_deadline_days": None,
+        "penalty_description": None,
+        "confidence": "partial",
+    },
+    "CO": {
+        "name": "Colorado",
+        "citation": "Colo. Rev. Stat. § 18-12-105.7",
+        "fee_prohibited": True,
+        "removal_deadline_days": None,
+        "penalty_description": None,
+        "confidence": "partial",
+    },
+    "IL": {
+        "name": "Illinois",
+        "citation": "730 ILCS 5/5-4-7",
+        "fee_prohibited": True,
+        "removal_deadline_days": None,
+        "penalty_description": None,
+        "confidence": "partial",
+    },
+    "WY": {
+        "name": "Wyoming",
+        "citation": "Wyoming booking-photograph removal statute (2021 session laws)",
+        "fee_prohibited": True,
+        "removal_deadline_days": None,
+        "penalty_description": None,
+        "confidence": "partial",
+    },
+}
+
+
+def get_statute(state_code: str) -> dict:
+    state_code = state_code.upper()
+    if state_code not in STATE_STATUTES:
+        raise KeyError(
+            f"No statute entry for '{state_code}'. Only states actually researched for "
+            f"this tool are included: {', '.join(STATE_STATUTES)}. Add an entry to "
+            f"statutes.py (with real citation/confidence) before using a new state."
+        )
+    return STATE_STATUTES[state_code]
 
 ==============================================================
 FILE: search.py
@@ -137,16 +255,18 @@ def find_mugshot_pages(client_name: str, api_key: str, cx: str, num_results: int
 FILE: draft.py
 ==============================================================
 
-"""Generate a Fla. Stat. § 901.43 booking-photo removal request.
+"""Generate a booking-photo removal request under a given state's statute.
 
 Written in the client's own first-person voice, asserting the client's own
-statutory right -- not as a representative acting on the client's behalf, and
-not asserting ownership of the photograph itself.
+statutory right -- not as a representative acting on the client's behalf,
+and not asserting ownership of the photograph itself.
 """
 from datetime import date, timedelta
 
-TEMPLATE = """\
-Subject: Request for Removal of Booking Photograph Pursuant to Fla. Stat. § 901.43
+from statutes import get_statute
+
+TEMPLATE_WITH_DEADLINE = """\
+Subject: Request for Removal of Booking Photograph Pursuant to {citation}
 
 To Whom It May Concern:
 
@@ -156,19 +276,17 @@ URL:
 
 {target_url}
 
-Under Florida Statute § 901.43, a person or entity that publishes an arrest
-booking photograph must remove it, without charge, within 10 calendar days
-of receiving a written request from the person depicted, and may not
-thereafter republish or redisseminate the photograph. This letter constitutes
-that written request.
+Under {citation}, a person or entity that publishes an arrest booking
+photograph may not charge a fee to remove it, and must remove it within
+{deadline_days} calendar days of receiving a written request from the person
+depicted. This letter constitutes that written request.
 
 Booking date: {booking_date}
 Arresting agency: {arresting_agency}
 
 Please confirm removal in writing. If the photograph is not removed within
-10 calendar days of the date of this request, I am entitled under Fla. Stat.
-§ 901.43 to seek injunctive relief, a civil penalty of up to $1,000 per day
-of continued noncompliance, and my reasonable attorney fees and costs.
+{deadline_days} calendar days of the date of this request, I am entitled
+under {citation} to pursue: {penalty_description}.
 
 Sincerely,
 {client_name}
@@ -178,26 +296,70 @@ Date of this request: {request_date}
 Deadline for removal: {deadline}
 """
 
+TEMPLATE_NO_DEADLINE = """\
+Subject: Request for Removal of Booking Photograph Pursuant to {citation}
+
+To Whom It May Concern:
+
+My name is {client_name}. I am writing to request the removal of my arrest
+booking photograph, which currently appears on your website at the following
+URL:
+
+{target_url}
+
+Under {citation}, a person or entity that publishes an arrest booking
+photograph may not charge a fee to remove, correct, or refrain from
+publishing it. This letter constitutes my written request for removal.
+
+Booking date: {booking_date}
+Arresting agency: {arresting_agency}
+
+Please confirm removal in writing. [NOTE TO OPERATOR: this state's specific
+removal deadline and noncompliance penalty were not confirmed for this tool
+-- verify current statutory text for {state_name} before sending, and add
+the specific deadline/penalty language before relying on this letter.]
+
+Sincerely,
+{client_name}
+{client_contact}
+
+Date of this request: {request_date}
+"""
+
 
 def generate_letter(
     client_name: str,
     client_contact: str,
     target_url: str,
+    state: str = "FL",
     booking_date: str = "",
     arresting_agency: str = "",
     request_date: date | None = None,
 ) -> str:
+    statute = get_statute(state)
     request_date = request_date or date.today()
-    deadline = request_date + timedelta(days=10)
-    return TEMPLATE.format(
+
+    common = dict(
+        citation=statute["citation"],
         client_name=client_name,
         client_contact=client_contact,
         target_url=target_url,
         booking_date=booking_date or "N/A",
         arresting_agency=arresting_agency or "N/A",
         request_date=request_date.isoformat(),
-        deadline=deadline.isoformat(),
+        state_name=statute["name"],
     )
+
+    if statute["removal_deadline_days"] is not None:
+        deadline = request_date + timedelta(days=statute["removal_deadline_days"])
+        return TEMPLATE_WITH_DEADLINE.format(
+            **common,
+            deadline_days=statute["removal_deadline_days"],
+            penalty_description=statute["penalty_description"] or "the remedies available under this statute",
+            deadline=deadline.isoformat(),
+        )
+
+    return TEMPLATE_NO_DEADLINE.format(**common)
 
 ==============================================================
 FILE: send.py
@@ -238,8 +400,8 @@ def send_removal_request(
 FILE: tracker.py
 ==============================================================
 
-"""Track sent removal requests and their 10-day compliance deadline in a
-Google Sheet."""
+"""Track sent removal requests and their compliance deadline in a Google
+Sheet, across whichever state's statute applies to each request."""
 from datetime import date, timedelta
 
 import gspread
@@ -249,10 +411,11 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 HEADER = [
     "Client Name",
+    "State",
     "Target URL",
     "Contact Email",
     "Request Sent Date",
-    "Deadline (10 days)",
+    "Deadline",
     "Status",
     "Notes",
     "Registrant Org",
@@ -277,16 +440,18 @@ def open_tracker(sheet_id: str, creds_path: str, worksheet_name: str = "Removal 
     return ws
 
 
-def log_request(ws, client_name: str, target_url: str, contact_email: str,
-                 sent_date: date | None = None, status: str = "Pending", notes: str = ""):
+def log_request(ws, client_name: str, state: str, target_url: str, contact_email: str,
+                 deadline_days: int | None, sent_date: date | None = None,
+                 status: str = "Pending", notes: str = ""):
     sent_date = sent_date or date.today()
-    deadline = sent_date + timedelta(days=10)
+    deadline = (sent_date + timedelta(days=deadline_days)).isoformat() if deadline_days else "N/A (verify statute)"
     ws.append_row([
         client_name,
+        state,
         target_url,
         contact_email,
         sent_date.isoformat(),
-        deadline.isoformat(),
+        deadline,
         status,
         notes,
         "", "", "", "", "", "",
@@ -294,15 +459,21 @@ def log_request(ws, client_name: str, target_url: str, contact_email: str,
 
 
 def list_overdue(ws) -> list[dict]:
-    """Return rows whose deadline has passed and status is still Pending."""
+    """Return rows whose deadline has passed and status is still Pending.
+    Rows with a non-date deadline (unconfirmed-statute states) are skipped
+    rather than guessed at."""
     today = date.today()
     rows = ws.get_all_records()
     overdue = []
     for row in rows:
-        if row.get("Status") == "Pending":
-            deadline = date.fromisoformat(row["Deadline (10 days)"])
-            if deadline < today:
-                overdue.append(row)
+        if row.get("Status") != "Pending":
+            continue
+        try:
+            deadline = date.fromisoformat(row["Deadline"])
+        except (ValueError, KeyError):
+            continue
+        if deadline < today:
+            overdue.append(row)
     return overdue
 
 
@@ -320,7 +491,7 @@ def record_owner_info(ws, target_url: str, lookup_result: dict):
         return False
 
     row = cell.row
-    ws.update(range_name=f"H{row}:M{row}", values=[[
+    ws.update(range_name=f"I{row}:N{row}", values=[[
         domain_info.get("registrant_org") or "",
         domain_info.get("registrant_name") or "",
         domain_info.get("registrant_email") or "",
@@ -435,7 +606,7 @@ FILE: main.py
 ==============================================================
 
 #!/usr/bin/env python3
-"""CLI for the § 901.43 mugshot removal workflow: search, draft, send, track."""
+"""CLI for the multi-state mugshot removal workflow: search, draft, send, track."""
 import argparse
 import json
 
@@ -443,6 +614,7 @@ from draft import generate_letter
 from owner_lookup import full_lookup
 from search import find_mugshot_pages
 from send import send_removal_request
+from statutes import STATE_STATUTES, get_statute
 from tracker import list_overdue, log_request, open_tracker, record_owner_info
 
 
@@ -456,6 +628,7 @@ def cmd_draft(args):
         client_name=args.client_name,
         client_contact=args.client_contact,
         target_url=args.target_url,
+        state=args.state,
         booking_date=args.booking_date,
         arresting_agency=args.arresting_agency,
     )
@@ -467,6 +640,7 @@ def cmd_send(args):
         client_name=args.client_name,
         client_contact=args.client_email,
         target_url=args.target_url,
+        state=args.state,
         booking_date=args.booking_date,
         arresting_agency=args.arresting_agency,
     )
@@ -482,8 +656,10 @@ def cmd_send(args):
     print(f"Sent to {args.to_email}")
 
     if args.sheet_id:
+        statute = get_statute(args.state)
         ws = open_tracker(args.sheet_id, args.creds)
-        log_request(ws, args.client_name, args.target_url, args.to_email)
+        log_request(ws, args.client_name, args.state, args.target_url, args.to_email,
+                    deadline_days=statute["removal_deadline_days"])
         print("Logged to tracker sheet.")
 
 
@@ -501,6 +677,10 @@ def cmd_lookup_owner(args):
     print(json.dumps(full_lookup(args.target_url), indent=2))
 
 
+def cmd_list_states(args):
+    print(json.dumps(STATE_STATUTES, indent=2))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -516,6 +696,7 @@ def main():
     p_draft.add_argument("--client-name", required=True)
     p_draft.add_argument("--client-contact", required=True)
     p_draft.add_argument("--target-url", required=True)
+    p_draft.add_argument("--state", default="FL", help="Two-letter state code (see list-states)")
     p_draft.add_argument("--booking-date", default="")
     p_draft.add_argument("--arresting-agency", default="")
     p_draft.set_defaults(func=cmd_draft)
@@ -525,6 +706,7 @@ def main():
     p_send.add_argument("--client-email", required=True)
     p_send.add_argument("--target-url", required=True)
     p_send.add_argument("--to-email", required=True, help="Site's contact/abuse email")
+    p_send.add_argument("--state", default="FL", help="Two-letter state code (see list-states)")
     p_send.add_argument("--booking-date", default="")
     p_send.add_argument("--arresting-agency", default="")
     p_send.add_argument("--smtp-host", required=True)
@@ -537,7 +719,7 @@ def main():
 
     p_overdue = sub.add_parser(
         "check-overdue",
-        help="List requests past their 10-day deadline and attach registrant/hosting lookup",
+        help="List requests past their deadline and attach registrant/hosting lookup",
     )
     p_overdue.add_argument("--sheet-id", required=True)
     p_overdue.add_argument("--creds", default="service_account.json")
@@ -546,6 +728,9 @@ def main():
     p_lookup = sub.add_parser("lookup-owner", help="Look up registrant and hosting info for a URL")
     p_lookup.add_argument("--target-url", required=True)
     p_lookup.set_defaults(func=cmd_lookup_owner)
+
+    p_states = sub.add_parser("list-states", help="List supported states and their statute data")
+    p_states.set_defaults(func=cmd_list_states)
 
     args = parser.parse_args()
     args.func(args)

@@ -1,5 +1,5 @@
-"""Track sent removal requests and their 10-day compliance deadline in a
-Google Sheet."""
+"""Track sent removal requests and their compliance deadline in a Google
+Sheet, across whichever state's statute applies to each request."""
 from datetime import date, timedelta
 
 import gspread
@@ -9,10 +9,11 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 HEADER = [
     "Client Name",
+    "State",
     "Target URL",
     "Contact Email",
     "Request Sent Date",
-    "Deadline (10 days)",
+    "Deadline",
     "Status",
     "Notes",
     "Registrant Org",
@@ -37,16 +38,18 @@ def open_tracker(sheet_id: str, creds_path: str, worksheet_name: str = "Removal 
     return ws
 
 
-def log_request(ws, client_name: str, target_url: str, contact_email: str,
-                 sent_date: date | None = None, status: str = "Pending", notes: str = ""):
+def log_request(ws, client_name: str, state: str, target_url: str, contact_email: str,
+                 deadline_days: int | None, sent_date: date | None = None,
+                 status: str = "Pending", notes: str = ""):
     sent_date = sent_date or date.today()
-    deadline = sent_date + timedelta(days=10)
+    deadline = (sent_date + timedelta(days=deadline_days)).isoformat() if deadline_days else "N/A (verify statute)"
     ws.append_row([
         client_name,
+        state,
         target_url,
         contact_email,
         sent_date.isoformat(),
-        deadline.isoformat(),
+        deadline,
         status,
         notes,
         "", "", "", "", "", "",
@@ -54,15 +57,21 @@ def log_request(ws, client_name: str, target_url: str, contact_email: str,
 
 
 def list_overdue(ws) -> list[dict]:
-    """Return rows whose deadline has passed and status is still Pending."""
+    """Return rows whose deadline has passed and status is still Pending.
+    Rows with a non-date deadline (unconfirmed-statute states) are skipped
+    rather than guessed at."""
     today = date.today()
     rows = ws.get_all_records()
     overdue = []
     for row in rows:
-        if row.get("Status") == "Pending":
-            deadline = date.fromisoformat(row["Deadline (10 days)"])
-            if deadline < today:
-                overdue.append(row)
+        if row.get("Status") != "Pending":
+            continue
+        try:
+            deadline = date.fromisoformat(row["Deadline"])
+        except (ValueError, KeyError):
+            continue
+        if deadline < today:
+            overdue.append(row)
     return overdue
 
 
@@ -80,7 +89,7 @@ def record_owner_info(ws, target_url: str, lookup_result: dict):
         return False
 
     row = cell.row
-    ws.update(range_name=f"H{row}:M{row}", values=[[
+    ws.update(range_name=f"I{row}:N{row}", values=[[
         domain_info.get("registrant_org") or "",
         domain_info.get("registrant_name") or "",
         domain_info.get("registrant_email") or "",
