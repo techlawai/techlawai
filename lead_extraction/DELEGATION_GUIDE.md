@@ -14,6 +14,33 @@ domestic battery.
 
 ---
 
+## Legal Basis for Sourcing This Data
+
+Under Florida's public records law (Ch. 119), booking records and arrest
+affidavits/probable cause affidavits are public once created, unless a
+specific statutory exemption applies (undercover officer info, certain active
+investigation info, victim info in sexual offense cases, juvenile records).
+There's no blanket legal bar on a phone number being visible in one of these
+documents if it's actually in there — Florida court rule 2.420, which governs
+what must be redacted from filed court records, requires redacting things
+like SSNs and financial account numbers, but a phone number isn't on that
+mandatory-redaction list. If an officer put a phone number in the narrative
+or header of an arrest affidavit, it generally stays visible when that
+document is scanned and filed.
+
+This does not mean every arrest affidavit has a phone number in it — that
+varies by agency template and by officer, and has to be checked document by
+document (see Part 3, step 5). It means that when one is present, nothing in
+Florida's public-records or court-confidentiality rules requires it to be
+hidden.
+
+Separately, eCaseView's own Terms of Use (see Notes at the end of this guide)
+govern how the site itself may be used to gather this data — that's a site
+usage restriction, not a public-records restriction on the underlying
+document.
+
+---
+
 ## Part 1 — Google Service Account Setup
 
 This is a one-time setup. It creates the credentials the script uses to write
