@@ -15,6 +15,12 @@ HEADER = [
     "Deadline (10 days)",
     "Status",
     "Notes",
+    "Registrant Org",
+    "Registrant Name",
+    "Registrant Email",
+    "Registrar",
+    "Hosting Org",
+    "Hosting Abuse Email",
 ]
 
 
@@ -43,6 +49,7 @@ def log_request(ws, client_name: str, target_url: str, contact_email: str,
         deadline.isoformat(),
         status,
         notes,
+        "", "", "", "", "", "",
     ], value_input_option="USER_ENTERED")
 
 
@@ -57,3 +64,28 @@ def list_overdue(ws) -> list[dict]:
             if deadline < today:
                 overdue.append(row)
     return overdue
+
+
+def record_owner_info(ws, target_url: str, lookup_result: dict):
+    """Write registrant/hosting lookup results into the row matching
+    target_url (the most recent matching row if there are several)."""
+    domain_info = lookup_result.get("domain_info", {})
+    hosting_info = lookup_result.get("hosting_info", {})
+
+    cell = None
+    matches = ws.findall(target_url)
+    if matches:
+        cell = matches[-1]
+    if cell is None:
+        return False
+
+    row = cell.row
+    ws.update(range_name=f"H{row}:M{row}", values=[[
+        domain_info.get("registrant_org") or "",
+        domain_info.get("registrant_name") or "",
+        domain_info.get("registrant_email") or "",
+        domain_info.get("registrar") or "",
+        hosting_info.get("hosting_org") or "",
+        hosting_info.get("abuse_email") or "",
+    ]])
+    return True

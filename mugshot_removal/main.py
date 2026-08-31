@@ -4,9 +4,10 @@ import argparse
 import json
 
 from draft import generate_letter
+from owner_lookup import full_lookup
 from search import find_mugshot_pages
 from send import send_removal_request
-from tracker import list_overdue, log_request, open_tracker
+from tracker import list_overdue, log_request, open_tracker, record_owner_info
 
 
 def cmd_search(args):
@@ -53,7 +54,15 @@ def cmd_send(args):
 def cmd_check_overdue(args):
     ws = open_tracker(args.sheet_id, args.creds)
     overdue = list_overdue(ws)
+    for row in overdue:
+        result = full_lookup(row["Target URL"])
+        record_owner_info(ws, row["Target URL"], result)
+        row["owner_lookup"] = result
     print(json.dumps(overdue, indent=2))
+
+
+def cmd_lookup_owner(args):
+    print(json.dumps(full_lookup(args.target_url), indent=2))
 
 
 def main():
@@ -90,10 +99,17 @@ def main():
     p_send.add_argument("--creds", default="service_account.json")
     p_send.set_defaults(func=cmd_send)
 
-    p_overdue = sub.add_parser("check-overdue", help="List requests past their 10-day deadline")
+    p_overdue = sub.add_parser(
+        "check-overdue",
+        help="List requests past their 10-day deadline and attach registrant/hosting lookup",
+    )
     p_overdue.add_argument("--sheet-id", required=True)
     p_overdue.add_argument("--creds", default="service_account.json")
     p_overdue.set_defaults(func=cmd_check_overdue)
+
+    p_lookup = sub.add_parser("lookup-owner", help="Look up registrant and hosting info for a URL")
+    p_lookup.add_argument("--target-url", required=True)
+    p_lookup.set_defaults(func=cmd_lookup_owner)
 
     args = parser.parse_args()
     args.func(args)
