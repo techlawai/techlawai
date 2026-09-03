@@ -13,6 +13,7 @@ REQUEST_FIELDS = [
     "Target URL",
     "Contact Email",
     "Consent Date",
+    "Disposition",
     "Request Sent Date",
     "Deadline",
     "Status",
@@ -53,7 +54,7 @@ def open_tracker(sheet_id: str, creds_path: str, worksheet_name: str = "Removal 
 
 def log_request(ws, client_name: str, state: str, target_url: str, contact_email: str,
                  consent_date: date, deadline_days: int | None, sent_date: date | None = None,
-                 status: str = "Pending", notes: str = ""):
+                 status: str = "Pending", notes: str = "", disposition: str = ""):
     """consent_date is required: a request must not be logged (or sent --
     see main.py) without a recorded date the client authorized it."""
     sent_date = sent_date or date.today()
@@ -64,6 +65,7 @@ def log_request(ws, client_name: str, state: str, target_url: str, contact_email
         target_url,
         contact_email,
         consent_date.isoformat(),
+        disposition,
         sent_date.isoformat(),
         deadline,
         status,

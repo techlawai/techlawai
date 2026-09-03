@@ -99,6 +99,7 @@ class TestLogRequest:
             "Target URL": "https://example-site.test/jane",
             "Contact Email": "abuse@example-site.test",
             "Consent Date": "2026-08-15",
+            "Disposition": "",
             "Request Sent Date": "2026-08-19",
             "Deadline": "2026-08-29",
             "Status": "Pending",

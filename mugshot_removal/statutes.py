@@ -36,6 +36,19 @@ would land on the client. The unverified-state letter asks, it does not
 claim.
 """
 
+# How an arrest ended. Several states condition the removal right on this, so
+# it has to be captured per client rather than assumed.
+DISPOSITIONS = (
+    "not-charged",
+    "dismissed",
+    "acquitted",
+    "sealed",
+    "expunged",
+    "convicted",
+    "pending",
+    "unknown",
+)
+
 STATE_STATUTES = {
     "FL": {
         "name": "Florida",
@@ -43,6 +56,9 @@ STATE_STATUTES = {
         "fee_prohibited": True,
         "removal_deadline_days": 10,
         "penalty_description": "civil penalty up to $1,000/day of noncompliance with an injunction, plus attorney fees and costs",
+        # No disposition condition recorded. Not the same as "confirmed to
+        # have none" -- FL has not been re-verified against primary text.
+        "qualifying_dispositions": None,
         "confidence": "verified",
     },
     # Publisher-facing and correct. Note it bars CHARGING for removal; it does
@@ -56,13 +72,14 @@ STATE_STATUTES = {
         "fee_prohibited": True,
         "removal_deadline_days": None,
         "penalty_description": None,
+        "qualifying_dispositions": None,
         "confidence": "partial",
     },
     # Publisher-facing and correct. TWO CAVEATS before relying on it:
     #   - The removal right is CONDITIONAL, reported as applying where the
     #     charges were dismissed, the person was acquitted, or the record was
-    #     sealed/expunged. This tool never captures the client's disposition,
-    #     so it cannot tell whether a given client qualifies.
+    #     sealed/expunged. Captured per client via --disposition and enforced
+    #     by qualifying_dispositions below.
     #   - The written request is reported to require certified mail with
     #     return receipt, or statutory overnight delivery. This tool sends
     #     EMAIL, which may not perfect the request.
@@ -73,6 +90,16 @@ STATE_STATUTES = {
         "fee_prohibited": True,
         "removal_deadline_days": None,
         "penalty_description": None,
+        # The one recorded condition: the right is reported to reach only
+        # these outcomes, so `send` refuses for any other disposition. A tuple
+        # rather than a set so `list-states` can still serialise the table.
+        "qualifying_dispositions": (
+            "not-charged",
+            "dismissed",
+            "acquitted",
+            "sealed",
+            "expunged",
+        ),
         "confidence": "partial",
     },
     # --- unverified: letter makes no statutory claim ------------------------
@@ -92,6 +119,7 @@ STATE_STATUTES = {
         "fee_prohibited": True,
         "removal_deadline_days": None,
         "penalty_description": None,
+        "qualifying_dispositions": None,
         "confidence": "unverified",
     },
     # Regulates SHERIFFS, not publishers: a sheriff may not release a booking
@@ -106,6 +134,7 @@ STATE_STATUTES = {
         "fee_prohibited": True,
         "removal_deadline_days": None,
         "penalty_description": None,
+        "qualifying_dispositions": None,
         "confidence": "unverified",
     },
     # Previously cited Or. Rev. Stat. § 30.835, which is "Action for improper
@@ -120,6 +149,7 @@ STATE_STATUTES = {
         "fee_prohibited": False,
         "removal_deadline_days": None,
         "penalty_description": None,
+        "qualifying_dispositions": None,
         "confidence": "unverified",
     },
     # Previously cited Colo. Rev. Stat. § 18-12-105.7, which sits in the
@@ -134,6 +164,7 @@ STATE_STATUTES = {
         "fee_prohibited": True,
         "removal_deadline_days": None,
         "penalty_description": None,
+        "qualifying_dispositions": None,
         "confidence": "unverified",
     },
     # Previously cited 730 ILCS 5/5-4-7; 730 ILCS 5 is the Unified Code of
@@ -147,6 +178,7 @@ STATE_STATUTES = {
         "fee_prohibited": True,
         "removal_deadline_days": None,
         "penalty_description": None,
+        "qualifying_dispositions": None,
         "confidence": "unverified",
     },
     # Previously carried a placeholder, not a citation. Reported to be Wyo.
@@ -159,11 +191,34 @@ STATE_STATUTES = {
         "fee_prohibited": True,
         "removal_deadline_days": None,
         "penalty_description": None,
+        "qualifying_dispositions": None,
         "confidence": "unverified",
     },
 }
 
 CONFIDENCE_LEVELS = {"verified", "partial", "unverified"}
+
+
+def validate_disposition(disposition: str) -> str:
+    """Normalise a claimed case disposition. Raises ValueError if it isn't one
+    this tool knows -- a typo must not read as a qualifying outcome."""
+    normalised = (disposition or "").strip().lower()
+    if normalised not in DISPOSITIONS:
+        raise ValueError(
+            f"Unknown disposition '{disposition}'. Use one of: "
+            f"{', '.join(DISPOSITIONS)}."
+        )
+    return normalised
+
+
+def disposition_qualifies(statute: dict, disposition: str | None) -> bool:
+    """Whether a client with this disposition is covered by the state's
+    removal right. States with no recorded condition accept anything --
+    including an absent disposition."""
+    qualifying = statute.get("qualifying_dispositions")
+    if not qualifying:
+        return True
+    return disposition in qualifying
 
 
 def get_statute(state_code: str) -> dict:

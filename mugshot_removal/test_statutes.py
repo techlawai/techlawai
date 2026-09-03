@@ -1,7 +1,14 @@
 """Tests for statutes.py -- the state statute table and its lookup."""
 import pytest
 
-from statutes import CONFIDENCE_LEVELS, STATE_STATUTES, get_statute
+from statutes import (
+    CONFIDENCE_LEVELS,
+    DISPOSITIONS,
+    STATE_STATUTES,
+    disposition_qualifies,
+    get_statute,
+    validate_disposition,
+)
 
 REQUIRED_KEYS = {
     "name",
@@ -9,6 +16,7 @@ REQUIRED_KEYS = {
     "fee_prohibited",
     "removal_deadline_days",
     "penalty_description",
+    "qualifying_dispositions",
     "confidence",
 }
 
@@ -33,6 +41,55 @@ class TestGetStatute:
         assert "ZZ" in message
         for state in STATE_STATUTES:
             assert state in message
+
+
+class TestValidateDisposition:
+    @pytest.mark.parametrize("value", DISPOSITIONS)
+    def test_accepts_every_known_disposition(self, value):
+        assert validate_disposition(value) == value
+
+    def test_normalises_case_and_padding(self):
+        assert validate_disposition("  Dismissed  ") == "dismissed"
+
+    @pytest.mark.parametrize(
+        "value", ["", "droppped", "nolle", "not guilty", "DISMISSED!", None]
+    )
+    def test_rejects_anything_else(self, value):
+        # A typo must never read as a qualifying outcome.
+        with pytest.raises(ValueError):
+            validate_disposition(value)
+
+    def test_error_lists_the_valid_values(self):
+        with pytest.raises(ValueError) as exc_info:
+            validate_disposition("nolle")
+
+        message = str(exc_info.value)
+        for value in DISPOSITIONS:
+            assert value in message
+
+
+class TestDispositionQualifies:
+    def test_state_without_a_condition_accepts_anything(self):
+        florida = STATE_STATUTES["FL"]
+
+        assert disposition_qualifies(florida, "convicted") is True
+        assert disposition_qualifies(florida, "") is True
+        assert disposition_qualifies(florida, None) is True
+
+    @pytest.mark.parametrize(
+        "value", ["not-charged", "dismissed", "acquitted", "sealed", "expunged"]
+    )
+    def test_conditional_state_accepts_qualifying_outcomes(self, value):
+        assert disposition_qualifies(STATE_STATUTES["GA"], value) is True
+
+    @pytest.mark.parametrize("value", ["convicted", "pending", "unknown"])
+    def test_conditional_state_rejects_the_rest(self, value):
+        assert disposition_qualifies(STATE_STATUTES["GA"], value) is False
+
+    def test_conditional_state_rejects_an_absent_disposition(self):
+        # Not knowing how the case ended is not the same as qualifying.
+        assert disposition_qualifies(STATE_STATUTES["GA"], "") is False
+        assert disposition_qualifies(STATE_STATUTES["GA"], None) is False
 
 
 class TestStatuteTable:

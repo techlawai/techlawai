@@ -75,6 +75,30 @@ class TestLetterContents:
         assert "Arresting agency: N/A" in letter
 
 
+class TestDisposition:
+    @pytest.mark.parametrize("state", sorted(STATE_STATUTES))
+    def test_every_template_carries_the_disposition(self, state):
+        # It appears in all three letter shapes, not just the statutory ones.
+        assert "Case disposition: dismissed" in letter_for(
+            state, disposition="dismissed"
+        )
+
+    @pytest.mark.parametrize("state", sorted(STATE_STATUTES))
+    def test_omitted_disposition_reads_as_not_stated(self, state):
+        letter = letter_for(state)
+
+        assert "Case disposition: Not stated" in letter
+        # Never silently blank, which would read as an answered question.
+        assert "Case disposition: \n" not in letter
+
+    def test_is_stated_not_argued(self):
+        # The letter reports the disposition; it does not build a claim on it.
+        letter = letter_for("GA", disposition="dismissed")
+
+        assert "Case disposition: dismissed" in letter
+        assert "because the charges" not in letter
+
+
 class TestRequestDate:
     def test_uses_the_given_request_date(self):
         letter = letter_for("FL")

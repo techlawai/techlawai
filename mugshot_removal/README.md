@@ -31,9 +31,25 @@ text what the statute grants **and against whom** — not extrapolating from
 another state's numbers, and not from secondary summaries.
 
 Two live caveats on the `partial` states, both recorded in `statutes.py`:
-CA bars charging for removal but imposes no duty to remove; GA's right is
-conditional on the disposition of the charges and its written request may
-have to go by certified mail, which this tool does not do.
+CA bars charging for removal but imposes no duty to remove; GA's written
+request may have to go by certified mail, which this tool does not do.
+
+## Case disposition
+
+Several states' removal rights reach only certain outcomes, so how the case
+ended is captured per client rather than assumed. Pass `--disposition` to
+`draft` or `send`:
+
+```
+not-charged  dismissed  acquitted  sealed  expunged  convicted  pending  unknown
+```
+
+It is printed in the letter as a plain statement of fact (`Case disposition:
+dismissed`), never argued from, and logged to the tracker. Where a state
+records qualifying outcomes — currently GA — **`send` refuses** for any other
+disposition, and refuses when none is given: not knowing how a case ended is
+not the same as qualifying. `draft` is never gated, so you can always preview
+what a letter would say.
 
 ## Setup
 

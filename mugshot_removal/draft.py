@@ -26,6 +26,7 @@ depicted. This letter constitutes that written request.
 
 Booking date: {booking_date}
 Arresting agency: {arresting_agency}
+Case disposition: {disposition}
 
 Please confirm removal in writing. If the photograph is not removed within
 {deadline_days} calendar days of the date of this request, I am entitled
@@ -56,6 +57,7 @@ publishing it. This letter constitutes my written request for removal.
 
 Booking date: {booking_date}
 Arresting agency: {arresting_agency}
+Case disposition: {disposition}
 
 Please confirm removal in writing. [NOTE TO OPERATOR: this state's specific
 removal deadline and noncompliance penalty were not confirmed for this tool
@@ -86,6 +88,7 @@ I am writing to ask you to remove that photograph and to stop publishing it.
 
 Booking date: {booking_date}
 Arresting agency: {arresting_agency}
+Case disposition: {disposition}
 
 Please confirm removal in writing.
 
@@ -123,6 +126,7 @@ def generate_letter(
     booking_date: str = "",
     arresting_agency: str = "",
     request_date: date | None = None,
+    disposition: str = "",
 ) -> str:
     statute = get_statute(state)
     request_date = request_date or date.today()
@@ -134,6 +138,9 @@ def generate_letter(
         target_url=target_url,
         booking_date=booking_date or "N/A",
         arresting_agency=arresting_agency or "N/A",
+        # Stated plainly rather than argued: several states condition the
+        # removal right on how the case ended, and the recipient can check it.
+        disposition=disposition or "Not stated",
         request_date=request_date.isoformat(),
         state_name=statute["name"],
     )

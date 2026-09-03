@@ -10,13 +10,35 @@ from draft import generate_letter
 from owner_lookup import full_lookup
 from search import find_mugshot_pages
 from send import send_removal_request
-from statutes import STATE_STATUTES, get_statute
+from statutes import (
+    DISPOSITIONS,
+    STATE_STATUTES,
+    disposition_qualifies,
+    get_statute,
+    validate_disposition,
+)
 from tracker import list_overdue, log_request, open_tracker, record_owner_info
+
+
+DISPOSITION_HELP = (
+    "How the case ended (" + ", ".join(DISPOSITIONS) + "). Some states' "
+    "removal rights reach only certain outcomes."
+)
 
 
 def cmd_search(args):
     results = find_mugshot_pages(args.client_name, args.api_key, args.cx, args.num_results)
     print(json.dumps(results, indent=2))
+
+
+def _checked_disposition(disposition):
+    """Normalise --disposition, or exit with the allowed values."""
+    if not disposition:
+        return ""
+    try:
+        return validate_disposition(disposition)
+    except ValueError as e:
+        raise SystemExit(str(e))
 
 
 def cmd_draft(args):
@@ -27,6 +49,7 @@ def cmd_draft(args):
         state=args.state,
         booking_date=args.booking_date,
         arresting_agency=args.arresting_agency,
+        disposition=_checked_disposition(args.disposition),
     )
     print(letter)
 
@@ -45,6 +68,22 @@ def cmd_send(args):
             f"unless that's genuinely when they signed it."
         )
 
+    # Refuse where the state's removal right does not reach this client's
+    # disposition -- asserting it anyway would be a claim they do not have.
+    disposition = _checked_disposition(args.disposition)
+    statute = get_statute(args.state)
+    if not disposition_qualifies(statute, disposition):
+        qualifying = ", ".join(sorted(statute["qualifying_dispositions"]))
+        raise SystemExit(
+            f"Refusing to send: {statute['name']}'s removal right under "
+            f"{statute['citation']} is recorded as reaching only these "
+            f"dispositions: {qualifying}.\n"
+            f"--disposition was "
+            f"{'not given' if not disposition else repr(disposition)}. "
+            f"Confirm how the case actually ended before sending; if the "
+            f"client does qualify, pass the matching --disposition."
+        )
+
     letter = generate_letter(
         client_name=args.client_name,
         client_contact=args.client_email,
@@ -52,6 +91,7 @@ def cmd_send(args):
         state=args.state,
         booking_date=args.booking_date,
         arresting_agency=args.arresting_agency,
+        disposition=disposition,
     )
     send_removal_request(
         smtp_host=args.smtp_host,
@@ -65,10 +105,10 @@ def cmd_send(args):
     print(f"Sent to {args.to_email}")
 
     if args.sheet_id:
-        statute = get_statute(args.state)
         ws = open_tracker(args.sheet_id, args.creds)
         log_request(ws, args.client_name, args.state, args.target_url, args.to_email,
-                    consent_date=consent_date, deadline_days=statute["removal_deadline_days"])
+                    consent_date=consent_date, deadline_days=statute["removal_deadline_days"],
+                    disposition=disposition)
         print("Logged to tracker sheet.")
 
 
@@ -113,6 +153,10 @@ def main():
     p_draft.add_argument("--state", default="FL", help="Two-letter state code (see list-states)")
     p_draft.add_argument("--booking-date", default="")
     p_draft.add_argument("--arresting-agency", default="")
+    p_draft.add_argument(
+        "--disposition", default="",
+        help=DISPOSITION_HELP,
+    )
     p_draft.set_defaults(func=cmd_draft)
 
     p_send = sub.add_parser("send", help="Draft, send, and log a removal request")
@@ -132,6 +176,10 @@ def main():
     p_send.add_argument(
         "--consent-date", required=True,
         help="Date (YYYY-MM-DD) the client actually signed/returned their written authorization. Required.",
+    )
+    p_send.add_argument(
+        "--disposition", default="",
+        help=DISPOSITION_HELP,
     )
     p_send.set_defaults(func=cmd_send)
 
