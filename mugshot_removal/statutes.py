@@ -10,11 +10,14 @@ real correspondence; state legislatures amend and renumber these regularly.
 confidence:
   "verified"   -> citation, deadline, and penalty confirmed from research
   "partial"    -> citation and fee-prohibition confirmed; deadline/penalty
-                  NOT confirmed. Left as None where research turned up
-                  nothing; where an unconfirmed figure is recorded anyway
-                  (TX), it is still unverified. Either way the generated
-                  letter carries a note telling the operator to verify the
-                  statute before sending -- see draft.py.
+                  NOT confirmed, and left as None rather than guessed. The
+                  generated letter carries a note telling the operator to
+                  verify the statute before sending -- see draft.py.
+
+A "partial" entry is not merely incomplete -- it may be wrong about what the
+statute does at all. TX is the worked example: it read as a 45-day removal
+deadline with a client-pursuable penalty, and is neither (see the note on
+that entry). Confirm what a statute actually grants before promoting it.
 """
 
 STATE_STATUTES = {
@@ -34,12 +37,29 @@ STATE_STATUTES = {
         "penalty_description": None,
         "confidence": "partial",
     },
+    # Ch. 109 is a dispute-accuracy regime, NOT a booking-photo removal right
+    # like Florida's. Both figures previously recorded here were wrong:
+    #   - The "45 days" is 45 BUSINESS days under § 109.004 to complete an
+    #     investigation into information the subject has DISPUTED as
+    #     incomplete or inaccurate. It is not a removal deadline; removal,
+    #     where required, is "promptly."
+    #   - The fee prohibition covers removing/correcting information found
+    #     incomplete or inaccurate through that dispute process. It does not
+    #     establish a right to have an accurate booking photo taken down.
+    #   - § 109.006's civil penalty ($500/violation, $500/day continuing) runs
+    #     to THE STATE, suable by the attorney general or a prosecuting
+    #     attorney -- not by the client.
+    # There IS a private right of action, but only under § 109.005, and only
+    # for publishing a record covered by an expunction order or an order of
+    # nondisclosure (or confidential juvenile/child records): $500 per
+    # violation to the subject, plus injunctive relief. That is a different
+    # letter than this tool writes -- see the README's Scope section.
     "TX": {
         "name": "Texas",
         "citation": "Tex. Bus. & Com. Code ch. 109",
         "fee_prohibited": True,
-        "removal_deadline_days": 45,
-        "penalty_description": "civil action for noncompliance; damages and other legal remedies per statute",
+        "removal_deadline_days": None,
+        "penalty_description": None,
         "confidence": "partial",
     },
     "GA": {
