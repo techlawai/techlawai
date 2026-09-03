@@ -39,6 +39,14 @@ Single case via flags:
 First Name, Last Name, Charge, Phone Number, Address, Arrest Date. Leave any
 field blank if it isn't present on the case/document you're looking at.
 
+## Tests
+
+    pip install -r requirements-dev.txt
+    python -m pytest
+
+The tests stub out Google's client libraries, so they need no service account
+key, no network, and no target sheet.
+
 ## Scope
 
 This tool only writes what you give it — it does not visit eCaseView, so it
