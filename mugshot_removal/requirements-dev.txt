@@ -1,0 +1,5 @@
+# Full dev environment: the runtime deps plus the test runner.
+# The tests themselves stub out every outbound integration, so
+# `pip install pytest` alone is enough if you only want to run the suite.
+-r requirements.txt
+pytest>=8.0.0

@@ -8,7 +8,7 @@ import json
 import pytest
 
 import extract
-from conftest import Credentials, FakeWorksheet
+from lead_fakes import Credentials, FakeWorksheet
 
 
 def write_cases(tmp_path, cases):

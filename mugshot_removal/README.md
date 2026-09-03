@@ -9,9 +9,10 @@ as the client's own first-person statutory request (the client is the
 
 See `statutes.py`. Each entry is either `"verified"` (citation, deadline,
 and penalty all confirmed) or `"partial"` (citation and fee-prohibition
-confirmed; deadline/penalty not confirmed and left blank rather than
-guessed — the generated letter says so explicitly and asks the operator to
-verify current statutory text before sending). Currently: FL (verified),
+confirmed; deadline/penalty not confirmed — usually left blank rather than
+guessed, though TX carries an unconfirmed figure). Every `"partial"` state's
+letter says so explicitly and asks the operator to verify current statutory
+text before sending. Currently: FL (verified),
 CA, TX, GA, UT, OR, CO, IL, WY (partial). Run `python main.py list-states`
 for the full data. Adding a new state means adding a real, sourced entry to
 `statutes.py` — not extrapolating from another state's numbers.
@@ -92,6 +93,17 @@ Look up registrant/hosting info for a single URL directly:
 ```
 python main.py lookup-owner --target-url "https://example-mugshot-site.com/jane-public"
 ```
+
+## Tests
+
+```
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+The tests stub out every outbound integration (Sheets, Custom Search, WHOIS,
+RDAP, DNS, SMTP), so they need no credentials or API keys, touch no network,
+and never send mail.
 
 ## Scope
 
