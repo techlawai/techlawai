@@ -1,0 +1,360 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Agent Town</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  html,body{margin:0;height:100%;background:#17132a;color:#f1e3c4;font-family:"Segoe UI Rounded","Segoe UI",system-ui,sans-serif;overflow:hidden}
+  #c{display:block;width:100%;height:100%}
+  .fomt{background:linear-gradient(#3b2718,#2a1a0f);border:3px solid #b8813a;border-radius:14px;box-shadow:0 3px 0 #6d4a1f,0 8px 18px rgba(0,0,0,.55);color:#f1e3c4}
+  #hud{position:fixed;top:12px;left:12px;padding:10px 14px;font-size:12px;max-width:330px}
+  #hud h1{font-size:15px;margin:0 0 4px;letter-spacing:2px;color:#ff9a3c}
+  #hud .st{color:#d9c39a}
+  #clock{position:fixed;top:12px;right:12px;padding:8px 14px;font-size:13px;text-align:right;min-width:150px}
+  #clock b{display:block;font-size:15px;color:#ffcf7a}
+  #panel{position:fixed;top:78px;right:12px;width:300px;max-height:78vh;overflow:auto;padding:8px 10px;font-size:12px}
+  .b{margin:8px 0;padding:8px 9px;border-radius:10px;border:2px solid #7a5a2e;background:#231509;cursor:pointer}
+  .b:hover{background:#31200e}
+  .b b{display:block;font-size:13px;color:#ffd9a0}
+  .b .n{color:#b99a6c}
+  .a{margin:4px 0 0 4px;padding:3px 0;border-top:1px dashed #5a3f1d}
+  .a .who{color:#f1e3c4;font-weight:600}.a .role{color:#d9b57a;font-size:11px;margin-left:6px}.a .tool{color:#ffb060;font-size:11px}
+  .a.home .who{color:#9c8563;font-weight:400}.a.home .tool{color:#8a9a8a}
+  kbd{background:#4a3218;padding:1px 5px;border-radius:4px;border:1px solid #b8813a}
+</style></head><body>
+<canvas id="c"></canvas>
+<div id="hud" class="fomt"><h1>🎃 AGENT TOWN</h1>
+  <div class="st" id="conn">connecting to the office…</div>
+  <div class="st" style="margin-top:5px">drag = look around · wheel = zoom · click a house = fly to it · <kbd>H</kbd> = hide roster</div>
+</div>
+<div id="clock" class="fomt"><span id="season">Fall</span><b id="time">--:--</b><span id="day"></span></div>
+<div id="panel" class="fomt"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ================== AGENCIES = cottages in town ==================
+const AGENCIES = [
+  {key:'agency', name:'Rebel Tech Agency', wall:0xd9c3a0, roof:0x8a4a1f, pos:[-24,0,-16],
+   match:/hunter|vale|gia|dante|lucy|rocky|scout|closer|mailer|builder|invoicer/i, folders:/^C--Vault$/,
+   hint:/Agents[\\/]Personal|PIPELINE|EMAIL-OUTREACH|rebeltech|whatsapp/i, accent:0x3f8fdf},
+  {key:'credit', name:'Credit Desk',       wall:0xc7d3b0, roof:0x4e6b36, pos:[ 24,0,-16],
+   match:/iris|theo|nina-payplan|cole|auditor|disputer|payplan|bizcredit/i, folders:/Credit/i,
+   hint:/Agents[\\/]Credit|CREDIT-FILE|bureau|dispute/i, accent:0x5ad06a},
+  {key:'bet',    name:'Bet Analyst Desk',  wall:0xdcb88f, roof:0x9a5a22, pos:[-24,0, 16],
+   match:/ace-odds|remy|poly-whale|whale|odds|public/i, folders:/Polymarket|Bet/i,
+   hint:/Polymarket|BETBOARD|betfloor|whale_consensus|BET-FLOOR/i, accent:0xffa03a},
+  {key:'disney', name:'Disney Social',     wall:0xd8b3c2, roof:0x7a3458, pos:[ 24,0, 16],
+   match:/disney/i, folders:/Disney/i, hint:/disney/i, accent:0xff6fb0},
+];
+// who is who: agent slug → display name + position. Unnamed sessions get a townsperson name from the pool (sticky per browser).
+const ROLES=[[/hunter/i,'Hunter','Lead Scout'],[/vale/i,'Vale','Closer · WhatsApp'],[/gia/i,'Gia','Email Lane'],[/dante/i,'Dante','Site Builder'],[/lucy/i,'Lucy','Invoicing · Joist'],[/rocky/i,'Rocky','Reply Watch'],
+  [/iris/i,'Iris','Credit Auditor'],[/theo/i,'Theo','Disputes & Letters'],[/nina/i,'Nina','Paydown Planner'],[/cole/i,'Cole','Business Credit'],
+  [/ace/i,'Ace','Odds Analyst'],[/remy/i,'Remy','Public Money'],[/whale/i,'Wally','Whale Tracker'],[/disney/i,'Dee','Social Content']];
+const NAMES=['Mateo','Sofia','Luca','Emma','Diego','Mia','Leo','Zoe','Nico','Ava','Max','Isla','Owen','Lena','Rafa','Cleo'];
+const PLAZA=[0,0,0], HOMES_Z=36;
+const hexTo=h=>'#'+h.toString(16).padStart(6,'0');
+
+// ================== procedural textures (all original) ==================
+function tex(w,h,draw,repeat=[1,1]){const cv=document.createElement('canvas');cv.width=w;cv.height=h;draw(cv.getContext('2d'),w,h);const t=new THREE.CanvasTexture(cv);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(...repeat);t.magFilter=THREE.NearestFilter;return t;}
+const T={
+  grass: tex(128,128,(g,w,h)=>{g.fillStyle='#4f7a3f';g.fillRect(0,0,w,h);for(let i=0;i<260;i++){g.fillStyle=['#456d37','#587f45','#6b7a3a'][i%3];g.fillRect(Math.random()*w,Math.random()*h,3,2);}},[40,40]),
+  cobble: tex(128,128,(g,w,h)=>{g.fillStyle='#6f6254';g.fillRect(0,0,w,h);for(let y=0;y<h;y+=16)for(let x=0;x<w;x+=16){g.fillStyle=['#8a7b68','#7e7060','#948570'][(x+y)%3];g.beginPath();g.ellipse(x+8+(y%32?8:0),y+8,7,5.5,0,0,Math.PI*2);g.fill();}},[10,10]),
+  plank: (c1,c2)=>tex(128,128,(g,w,h)=>{g.fillStyle=c1;g.fillRect(0,0,w,h);g.fillStyle=c2;for(let y=0;y<h;y+=16){g.fillRect(0,y,w,2);g.fillRect((y*3)%w,y,2,16);}},[3,1]),
+  floor: tex(128,128,(g,w,h)=>{g.fillStyle='#b8823f';g.fillRect(0,0,w,h);g.fillStyle='#8a5e2a';for(let y=0;y<h;y+=16){g.fillRect(0,y,w,2);g.fillRect((y*5)%w,y,2,16);}},[4,3]),
+  checker: tex(128,128,(g,w,h)=>{for(let y=0;y<h;y+=32)for(let x=0;x<w;x+=32){g.fillStyle=((x+y)/32)%2?'#8a5e2a':'#e8d8b8';g.fillRect(x,y,32,32);}},[4,3]),
+  thatch: tex(128,128,(g,w,h)=>{g.fillStyle='#a8843c';g.fillRect(0,0,w,h);g.strokeStyle='#7d5f26';g.lineWidth=2;for(let i=0;i<70;i++){const x=Math.random()*w,y=Math.random()*h;g.beginPath();g.moveTo(x,y);g.lineTo(x+6,y+14);g.stroke();}},[4,2]),
+  rug: tex(128,128,(g,w,h)=>{g.fillStyle='#a34a4a';g.fillRect(0,0,w,h);g.strokeStyle='#e8c98a';g.lineWidth=6;g.strokeRect(10,10,w-20,h-20);g.fillStyle='#e8c98a';g.beginPath();g.ellipse(w/2,h/2,26,18,0,0,Math.PI*2);g.fill();},[1,1]),
+  water: tex(128,128,(g,w,h)=>{g.fillStyle='#4f7f7a';g.fillRect(0,0,w,h);g.fillStyle='#6fa39c';for(let i=0;i<40;i++){g.beginPath();g.ellipse(Math.random()*w,Math.random()*h,10,3,0,0,Math.PI*2);g.fill();}},[2,2]),
+};
+const grad=new THREE.DataTexture(new Uint8Array([70,130,200,255]),4,1,THREE.LuminanceFormat); grad.minFilter=grad.magFilter=THREE.NearestFilter; grad.needsUpdate=true;
+const toon=(o)=>new THREE.MeshToonMaterial({gradientMap:grad,...o});
+const glow=(color,opacity=1)=>new THREE.MeshBasicMaterial({color,transparent:opacity<1,opacity});
+
+// ================== scene: dusk, cozy ==================
+const canvas=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true}); renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x17132a); scene.fog=new THREE.Fog(0x1c1834,90,190);
+const camera=new THREE.PerspectiveCamera(48,1,0.1,400);
+let cam={theta:0.7,phi:0.95,r:80,target:new THREE.Vector3(0,0,6)};
+function placeCam(){camera.position.set(cam.target.x+cam.r*Math.sin(cam.phi)*Math.sin(cam.theta),cam.target.y+cam.r*Math.cos(cam.phi),cam.target.z+cam.r*Math.sin(cam.phi)*Math.cos(cam.theta));camera.lookAt(cam.target);}
+scene.add(new THREE.HemisphereLight(0x5a5aa8,0x1a1410,0.45));
+const moonLight=new THREE.DirectionalLight(0x9fb4ff,0.5); moonLight.position.set(50,60,-70); moonLight.castShadow=true; moonLight.shadow.mapSize.set(2048,2048); Object.assign(moonLight.shadow.camera,{left:-90,right:90,top:90,bottom:-90,far:220}); scene.add(moonLight);
+{const m=new THREE.Mesh(new THREE.SphereGeometry(7,20,16),glow(0xfff1c2)); m.position.set(70,75,-110); scene.add(m);
+ const halo=new THREE.Sprite(new THREE.SpriteMaterial({map:tex(128,128,(g,w,h)=>{const r=g.createRadialGradient(64,64,10,64,64,64);r.addColorStop(0,'rgba(255,230,170,.55)');r.addColorStop(1,'rgba(255,230,170,0)');g.fillStyle=r;g.fillRect(0,0,w,h);}),transparent:true,depthWrite:false})); halo.scale.set(40,40,1); halo.position.copy(m.position); scene.add(halo);}
+function lamp(color,intensity,dist,x,y,z){const l=new THREE.PointLight(color,intensity,dist,2); l.position.set(x,y,z); scene.add(l); return l;}
+
+// ground, paths
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(220,220),toon({map:T.grass})); ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
+function path(w,h,x,z){const p=new THREE.Mesh(new THREE.PlaneGeometry(w,h),toon({map:T.cobble}));p.rotation.x=-Math.PI/2;p.position.set(x,0.03,z);p.receiveShadow=true;scene.add(p);}
+path(6,100,0,4); path(140,6,0,0); path(150,5,0,HOMES_Z-7);
+for(const a of AGENCIES) path(4,12,a.pos[0],a.pos[2]+(a.pos[2]<0?10:-10));
+
+// helpers
+function box(w,h,d,mat,x,y,z,cast=true){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.position.set(x,y,z);m.castShadow=cast;m.receiveShadow=true;return m;}
+function cyl(rt,rb,h,mat,x,y,z,seg=12){const m=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg),mat);m.position.set(x,y,z);m.castShadow=true;return m;}
+function gableRoof(w,d,h,color){const s=new THREE.Shape(); s.moveTo(-w/2,0); s.lineTo(w/2,0); s.lineTo(0,h); s.closePath();
+  const g=new THREE.ExtrudeGeometry(s,{depth:d,bevelEnabled:false}); g.translate(0,0,-d/2); const m=new THREE.Mesh(g,toon({map:T.thatch,color,transparent:true,opacity:.1,depthWrite:false})); return m;}
+// multi-line label sprite: lines = [{t, px, c}]
+function label(lines,bg='#2b1d12',border='#c98a3a'){if(typeof lines==='string') lines=[{t:lines,px:26,c:'#f5e6c8'}];
+  const cv=document.createElement('canvas');const ctx=cv.getContext('2d'); const f=l=>`bold ${l.px}px "Segoe UI Rounded","Segoe UI",sans-serif`;
+  let w=0,h=16; for(const l of lines){ctx.font=f(l);w=Math.max(w,ctx.measureText(l.t).width);h+=l.px+6;} w+=28; cv.width=w; cv.height=h;
+  const r=12; ctx.fillStyle=bg; ctx.strokeStyle=border; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(r,2); ctx.lineTo(w-r,2); ctx.quadraticCurveTo(w-2,2,w-2,r); ctx.lineTo(w-2,h-r); ctx.quadraticCurveTo(w-2,h-2,w-r,h-2); ctx.lineTo(r,h-2); ctx.quadraticCurveTo(2,h-2,2,h-r); ctx.lineTo(2,r); ctx.quadraticCurveTo(2,2,r,2); ctx.closePath(); ctx.fill(); ctx.stroke();
+  let y=10; ctx.textAlign='center'; ctx.textBaseline='top'; for(const l of lines){ctx.font=f(l); ctx.fillStyle=l.c; ctx.fillText(l.t,w/2,y); y+=l.px+6;}
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthTest:false})); sp.scale.set(w/30,h/30,1); sp.userData.h=h/30; return sp;}
+const LEAF=[0x3f6b32,0x9a5a1e,0xb8471f,0xc98a2a,0x4f7a3f];
+function tree(x,z,s=1){const t=new THREE.Group();const k=box(.6*s,1.4*s,.6*s,toon({color:0x4a2c16}),0,.7*s,0);const c=LEAF[Math.floor(Math.random()*LEAF.length)];const c1=new THREE.Mesh(new THREE.SphereGeometry(1.9*s,10,8),toon({color:c}));c1.position.y=2.6*s;c1.castShadow=true;const c2=new THREE.Mesh(new THREE.SphereGeometry(1.4*s,10,8),toon({color:c}));c2.position.set(.8*s,3.4*s,.4*s);c2.castShadow=true;t.add(k,c1,c2);t.position.set(x,0,z);scene.add(t);}
+function deadTree(x,z,s=1){const t=new THREE.Group();const m=toon({color:0x2a1a10});t.add(box(.7*s,5*s,.7*s,m,0,2.5*s,0));for(let i=0;i<4;i++){const b=box(.3*s,3*s,.3*s,m,0,4.2*s,0);b.rotation.z=(i%2?1:-1)*(.5+i*.15);b.rotation.y=i*1.3;b.position.x+=(i%2?1:-1)*.9*s;t.add(b);}t.position.set(x,0,z);t.rotation.y=Math.random()*6;scene.add(t);}
+function flowers(x,z,n=6){for(let i=0;i<n;i++){const f=new THREE.Mesh(new THREE.SphereGeometry(.28,8,6),toon({color:[0xc9552a,0xd9a23a,0xe0d0b0,0x8a4fb0][i%4]}));f.position.set(x+(Math.random()-.5)*3,.35,z+(Math.random()-.5)*1.6);scene.add(f);}}
+function fence(x1,z1,x2,z2){const dx=x2-x1,dz=z2-z1,len=Math.hypot(dx,dz),n=Math.max(2,Math.round(len/2.2));const mat=toon({color:0x8a6236});for(let i=0;i<=n;i++){const t=i/n;scene.add(box(.35,1.4,.35,mat,x1+dx*t,.7,z1+dz*t));}const rail=box(len,.18,.18,mat,(x1+x2)/2,1.0,(z1+z2)/2);rail.rotation.y=-Math.atan2(dz,dx);scene.add(rail);const rail2=rail.clone();rail2.position.y=.5;scene.add(rail2);}
+function pumpkin(x,z,s=1,lit=false){const g=new THREE.Group(); const body=new THREE.Mesh(new THREE.SphereGeometry(.8*s,12,10),lit?glow(0xff8a2a):toon({color:0xd9691f})); body.scale.set(1.15,.85,1.15); body.position.y=.65*s; body.castShadow=!lit; g.add(body);
+  g.add(box(.18*s,.35*s,.18*s,toon({color:0x3f5a22}),0,1.35*s,0,false));
+  if(lit){const f=glow(0x1a0800); for(const [ex,ey,w,h] of [[-.3,.75,.22,.2],[.3,.75,.22,.2],[0,.45,.5,.16]]) g.add(box(w*s,h*s,.1,f,ex*s,ey*s,.82*s,false)); g.add(lamp(0xff8c2a,1.3,11,0,1.1*s,0));}
+  g.position.set(x,0,z); g.rotation.y=Math.random()*6; scene.add(g); return g;}
+function lampPost(x,z){const g=new THREE.Group(); g.add(box(.25,4.6,.25,toon({color:0x2a2a2a}),0,2.3,0)); g.add(box(.9,.9,.9,glow(0xffc46a),0,4.8,0,false)); g.add(lamp(0xffb060,1.0,18,0,4.8,0)); g.position.set(x,0,z); scene.add(g);}
+const bats=[]; function bat(){const g=new THREE.Group(); const m=glow(0x0a0710); const w1=new THREE.Mesh(new THREE.ConeGeometry(.5,1.4,3),m); w1.rotation.z=Math.PI/2; w1.position.x=-.7; const w2=w1.clone(); w2.rotation.z=-Math.PI/2; w2.position.x=.7; g.add(w1,w2,new THREE.Mesh(new THREE.SphereGeometry(.25,6,6),m)); g.userData={cx:(Math.random()-.5)*90,cz:(Math.random()-.5)*60-10,r:6+Math.random()*14,y:9+Math.random()*10,ph:Math.random()*6,sp:.4+Math.random()*.5}; scene.add(g); bats.push(g); return g;}
+for(let i=0;i<14;i++) bat();
+const ghosts=[]; function ghost(x,z){const g=new THREE.Group(); const m=new THREE.MeshBasicMaterial({color:0xe8f0ff,transparent:true,opacity:.35}); const b=new THREE.Mesh(new THREE.SphereGeometry(.8,10,8),m); b.scale.y=1.4; b.position.y=.4; g.add(b); const e=glow(0x101020); const e1=new THREE.Mesh(new THREE.SphereGeometry(.12,6,6),e); e1.position.set(-.25,.7,.7); const e2=e1.clone(); e2.position.x=.25; g.add(e1,e2); g.userData={x,z,ph:Math.random()*6}; g.position.set(x,2,z); scene.add(g); ghosts.push(g); return g;}
+const seatAt=(x,z,yaw)=>({pos:new THREE.Vector3(x,0,z),yaw});
+const footprints=[]; // for tree exclusion
+
+// ================== generic see-through cottage ==================
+function cottage({name,pos,W=18,D=13,H=6.5,wall,roof,accent=0xffcf7a,floorTex=T.floor,decorate}){
+  const g=new THREE.Group(); g.position.set(...pos); footprints.push({x:pos[0],z:pos[2],w:W/2+4,d:D/2+4});
+  const body=box(W,H,D,toon({map:T.plank(hexTo(wall),'#5a4630'),transparent:true,opacity:.12,depthWrite:false}),0,H/2,0,false); g.add(body);
+  const r=gableRoof(W+2.4,D+2.4,H*.85,roof); r.position.y=H; g.add(r);
+  g.add(box(1.6,3.2,1.6,toon({color:0x6a615a,transparent:true,opacity:.35}),W/2-3,H+3.6,-2,false));
+  g.add(box(2.6,3.6,.35,toon({color:0x4a2a14,transparent:true,opacity:.6}),0,1.8,D/2+.05,false));
+  for(const wx of [-W/3,W/3]) g.add(box(2.6,2.2,.3,glow(0xffc46a,.75),wx,3.6,D/2+.05,false));
+  const sign=label([{t:name,px:34,c:hexTo(accent)}]); sign.position.set(0,H+7,0); g.add(sign);
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(W-.6,D-.6),toon({map:floorTex})); floor.rotation.x=-Math.PI/2; floor.position.y=.06; floor.receiveShadow=true; g.add(floor);
+  g.add(lamp(0xffb070,1.4,24,0,4.2,0));
+  const seats=decorate(g,W,D).map(s=>({pos:new THREE.Vector3(pos[0]+s.pos.x,0,pos[2]+s.pos.z),yaw:s.yaw}));
+  scene.add(g); pumpkin(pos[0]-2.6,pos[2]+D/2+1.2,1,true); pumpkin(pos[0]+2.6,pos[2]+D/2+1.2,1,true);
+  return {group:g,body,seats,pos};}
+function armchair(g,x,z,yaw,color=0x7a3a3a){const c=new THREE.Group(); c.add(box(1.3,.6,1.3,toon({color}),0,.3,0)); c.add(box(1.3,1.1,.3,toon({color}),0,.85,-.5)); c.add(box(.3,.9,1.3,toon({color}),-.5,.7,0)); c.add(box(.3,.9,1.3,toon({color}),.5,.7,0)); c.position.set(x,0,z); c.rotation.y=yaw; g.add(c);}
+function stool(g,x,z){g.add(cyl(.35,.35,.12,toon({color:0x6a3f1c}),x,.7,z)); g.add(cyl(.08,.08,.7,toon({color:0x4a2a14}),x,.35,z,6));}
+
+// ================== agency cottages ==================
+const buildings={};
+for(const a of AGENCIES){
+  const b=cottage({...a,decorate:(g,W,D)=>{
+    const rug=new THREE.Mesh(new THREE.PlaneGeometry(9,6),toon({map:T.rug})); rug.rotation.x=-Math.PI/2; rug.position.set(0,.08,1.5); g.add(rug);
+    g.add(box(3.2,4.2,1,toon({color:0x6a3f1c}),-W/2+2.2,2.1,-D/2+1));
+    g.add(box(1.1,4.8,1.1,toon({color:0x4a2a14}),W/2-2,2.4,-D/2+1)); g.add(box(.9,.9,.2,glow(0xfff1c8),W/2-2,4.2,-D/2+1.6,false));
+    g.add(box(1.4,1.6,1.4,toon({color:0x5a4a3a}),-W/2+6,.8,-D/2+.9)); g.add(box(1,1,.3,glow(0xff9a3a),-W/2+6,1.9,-D/2+1.2,false));
+    const seats=[]; for(let i=0;i<6;i++){const dx=-5.5+(i%3)*5.5, dz=-2.6+Math.floor(i/3)*5.2;
+      g.add(box(3,.35,1.6,toon({color:0xb8823f}),dx,1.05,dz)); for(const [lx,lz] of [[-1.2,-.6],[1.2,-.6],[-1.2,.6],[1.2,.6]]) g.add(box(.22,1,.22,toon({color:0x8a5e2a}),dx+lx,.5,dz+lz,false));
+      g.add(box(.5,.5,.5,glow(0xffe0a0),dx-1,1.5,dz-.4,false)); seats.push(seatAt(dx,dz+1.4,Math.PI));}
+    return seats;}});
+  buildings[a.key]={...a,...b};
+  pumpkin(a.pos[0]-8,a.pos[2]+8.1,.8); flowers(a.pos[0]+8,a.pos[2]+8);
+}
+
+// ================== hangouts: coffee shop, rec room, reading nook, park, hot spring ==================
+const VENUES={};
+VENUES.coffee=cottage({name:'☕ The Night Owl Café',pos:[-52,0,-14],W:14,D:11,wall:0xd9c3a0,roof:0x5a3a22,accent:0xffcf7a,floorTex:T.checker,decorate:(g,W,D)=>{
+  g.add(box(7,1.3,1.4,toon({color:0x6a3f1c}),0,.65,-D/2+1.6)); g.add(box(1.2,1,.8,toon({color:0xb0b0b0}),2,1.8,-D/2+1.5)); g.add(box(.4,.4,.4,glow(0xff9a3a),2,2.5,-D/2+1.5,false));
+  g.add(box(2.6,1.6,.15,toon({color:0x1f2a1f}),-2.5,3.4,-D/2+.3,false)); // chalkboard
+  for(const [x,z] of [[-3.5,1.5],[3.5,1.5],[0,3.2]]){g.add(cyl(1,1,.15,toon({color:0x8a5e2a}),x,1.05,z)); g.add(cyl(.12,.12,1,toon({color:0x4a2a14}),x,.5,z,6)); g.add(cyl(.18,.14,.28,glow(0xf4efe6),x+.3,1.25,z,8)); stool(g,x-1.4,z); stool(g,x+1.4,z);}
+  return [seatAt(-4.9,1.5,Math.PI/2),seatAt(-2.1,1.5,-Math.PI/2),seatAt(2.1,1.5,Math.PI/2),seatAt(4.9,1.5,-Math.PI/2),seatAt(-1.4,3.2,Math.PI/2),seatAt(1.4,3.2,-Math.PI/2),seatAt(-2,-D/2+3.4,0),seatAt(2,-D/2+3.4,0)];}});
+VENUES.rec=cottage({name:'🎱 Rec Room',pos:[52,0,-14],W:15,D:11,wall:0xc9b3a0,roof:0x3a3a5a,accent:0x9fd0ff,decorate:(g,W,D)=>{
+  g.add(box(4.6,.5,2.6,toon({color:0x2f6b3a}),0,1.1,1)); g.add(box(5,.3,3,toon({color:0x5a3a22}),0,.85,1)); for(const [lx,lz] of [[-2.1,-1.1],[2.1,-1.1],[-2.1,1.1],[2.1,1.1]]) g.add(box(.3,.85,.3,toon({color:0x4a2a14}),lx,.42,1+lz,false));
+  for(let i=0;i<6;i++){const b=new THREE.Mesh(new THREE.SphereGeometry(.13,8,8),glow([0xffd23a,0x3a5fb0,0xd9302a,0x2a2a2a,0x8a3a90,0xf4efe6][i])); b.position.set(-1+i*.4,1.48,1+(i%2)*.4-.2); g.add(b);}
+  g.add(cyl(.9,.9,.12,toon({color:0x2a2a2a}),W/2-.5,3,-1,20)); g.add(cyl(.5,.5,.14,glow(0xd9302a),W/2-.52,3,-1,16)); // dartboard
+  g.add(box(1.6,2.6,1,toon({color:0x8a2a2a}),-W/2+1.4,1.3,-D/2+1)); g.add(box(1.2,.8,.2,glow(0xff6fb0),-W/2+1.4,2.1,-D/2+1.55,false)); // jukebox
+  g.add(box(5,1.3,1.2,toon({color:0x6a3f1c}),1.5,.65,-D/2+1.4)); for(const x of [-.3,1.5,3.3]) stool(g,x,-D/2+3);
+  return [seatAt(-3.6,1,Math.PI/2),seatAt(3.6,1,-Math.PI/2),seatAt(0,3.8,Math.PI),seatAt(-.3,-D/2+3,0),seatAt(1.5,-D/2+3,0),seatAt(3.3,-D/2+3,0)];}});
+VENUES.library=cottage({name:'📚 Reading Nook',pos:[-52,0,14],W:14,D:11,wall:0xc7d3b0,roof:0x4a5a3a,accent:0xd9b57a,decorate:(g,W,D)=>{
+  for(const x of [-4.5,-1.5,1.5,4.5]) g.add(box(2.6,4.2,.9,toon({color:0x6a3f1c}),x,2.1,-D/2+.8));
+  for(const x of [-4.5,-1.5,1.5,4.5]) for(let j=0;j<3;j++) g.add(box(2.2,.5,.3,toon({color:[0xb8302a,0x3a5fb0,0x4f7a3f,0xe8c85a][(j+x)&3|0]}),x,1+j*1.2,-D/2+1.25,false));
+  g.add(box(1.4,1.6,1.4,toon({color:0x5a4a3a}),W/2-1.2,.8,1)); g.add(box(.3,1,1,glow(0xff9a3a),W/2-1.5,1.9,1,false)); // fireplace
+  const rug=new THREE.Mesh(new THREE.PlaneGeometry(7,5),toon({map:T.rug})); rug.rotation.x=-Math.PI/2; rug.position.set(-1,.08,1.5); g.add(rug);
+  armchair(g,-3.5,1.5,Math.PI/2); armchair(g,1.2,1.5,-Math.PI/2); armchair(g,-3.5,4,Math.PI/2,0x3a5a6a); armchair(g,1.2,4,-Math.PI/2,0x3a5a6a);
+  return [seatAt(-3.5,1.5,Math.PI/2),seatAt(1.2,1.5,-Math.PI/2),seatAt(-3.5,4,Math.PI/2),seatAt(1.2,4,-Math.PI/2)];}});
+// park with a campfire
+const fire={};
+{const px=52,pz=14; footprints.push({x:px,z:pz,w:11,d:11}); path(4,10,px,pz-8);
+ const logs=toon({color:0x4a2c16}); for(let i=0;i<3;i++){const l=cyl(.3,.3,2.2,logs,px,.3,pz); l.rotation.z=Math.PI/2; l.rotation.y=i*1.05; scene.add(l);}
+ fire.mesh=new THREE.Mesh(new THREE.ConeGeometry(.9,2.2,8),glow(0xff7a1a)); fire.mesh.position.set(px,1.4,pz); scene.add(fire.mesh);
+ const inner=new THREE.Mesh(new THREE.ConeGeometry(.45,1.4,8),glow(0xffe07a)); inner.position.set(px,1.1,pz); scene.add(inner);
+ fire.light=lamp(0xff8a3a,1.8,20,px,2,pz);
+ const seats=[]; for(let i=0;i<6;i++){const a=i/6*Math.PI*2+.5; const x=px+Math.cos(a)*4.2, z=pz+Math.sin(a)*4.2; const b=new THREE.Group(); b.add(box(2.2,.35,.8,toon({color:0x8a6236}),0,.75,0)); b.add(box(2.2,.9,.2,toon({color:0x8a6236}),0,1.3,-.4)); for(const lx of [-.9,.9]) b.add(box(.2,.75,.6,toon({color:0x6a4a26}),lx,.37,0,false)); b.position.set(x,0,z); b.rotation.y=Math.atan2(px-x,pz-z); scene.add(b); seats.push({pos:new THREE.Vector3(x,0,z),yaw:Math.atan2(px-x,pz-z)});}
+ VENUES.park={pos:[px,0,pz],seats}; const sg=label([{t:'🔥 Campfire Park',px:30,c:'#ffb060'}]); sg.position.set(px,6.5,pz); scene.add(sg);
+ pumpkin(px-6,pz+5,.9,true); pumpkin(px+6,pz-5,.9,true); tree(px-7,pz-6,1.1); tree(px+7,pz+6,1.1);}
+// hot spring
+{const pool=new THREE.Mesh(new THREE.CircleGeometry(5.5,28),toon({map:T.water,transparent:true,opacity:.95})); pool.rotation.x=-Math.PI/2; pool.scale.set(1.35,1,1); pool.position.set(0,.07,-40); scene.add(pool);
+ for(let i=0;i<18;i++){const a=i/18*Math.PI*2; const r=new THREE.Mesh(new THREE.SphereGeometry(.7+Math.random()*.4,7,6),toon({color:0x5a534c})); r.position.set(Math.cos(a)*7.6,.35,-40+Math.sin(a)*5.8); scene.add(r);}
+ fence(-11,-46,11,-46); fence(-11,-34,11,-34); const sg=label([{t:'♨ Hot Spring',px:30,c:'#9fd0ff'}]); sg.position.set(0,5,-40); scene.add(sg); ghost(-6,-40); ghost(7,-38);
+ lamp(0x9fd0ff,.8,16,0,2,-40); const seats=[]; for(let i=0;i<6;i++){const a=i/6*Math.PI*2+.3; const x=Math.cos(a)*5.6, z=-40+Math.sin(a)*4.2; seats.push({pos:new THREE.Vector3(x,0,z),yaw:Math.atan2(0-x,-40-z)});}
+ VENUES.spring={pos:[0,0,-40],seats};}
+for(const v of ['coffee','rec','library']) path(4,10,VENUES[v].pos[0],VENUES[v].pos[2]+(VENUES[v].pos[2]<0?9:-9));
+
+// ================== homes ==================
+const homes=[], homeInside=[]; const homeWalls=[0xd9c3a0,0xd8b3c2,0xc7d3b0,0xdcb88f,0xb9c6d9,0xc9b3d9], homeRoofs=[0x8a4a1f,0x4e6b36,0x9a5a22,0x7a3458,0x3a5a80,0x5a3a80];
+for(let i=0;i<14;i++){const x=-65+i*10; const h=new THREE.Group(); const W=6,D=6,H=3.6;
+  h.add(box(W,H,D,toon({map:T.plank(hexTo(homeWalls[i%6]),'#5a4630'),transparent:true,opacity:.28,depthWrite:false}),0,H/2,0,false));
+  const r=gableRoof(W+1.6,D+1.6,3.2,homeRoofs[i%6]); r.material.opacity=.22; r.position.y=H; h.add(r);
+  const fl=new THREE.Mesh(new THREE.PlaneGeometry(W-.4,D-.4),toon({map:T.floor})); fl.rotation.x=-Math.PI/2; fl.position.y=.05; h.add(fl);
+  h.add(box(2.2,.7,1.2,toon({color:0x7a3a3a}),-1.4,.45,-1.6)); h.add(box(2.2,.3,1.2,toon({color:0xe8d8b8}),-1.4,.95,-1.6,false));
+  h.add(box(1.2,.9,1.2,toon({color:0x8a5e2a}),1.6,.45,-1.6)); h.add(box(.4,.4,.4,glow(0xffe0a0),1.6,1.1,-1.6,false));
+  h.add(box(1.4,2.2,.3,toon({color:0x4a2a14,transparent:true,opacity:.6}),0,1.1,D/2+.05,false)); h.add(box(1.4,1.2,.25,glow(0xffc46a,.8),-1.9,2.2,D/2+.05,false));
+  h.position.set(x,0,HOMES_Z); scene.add(h); fence(x-4.6,HOMES_Z-4.4,x+4.6,HOMES_Z-4.4);
+  if(i%3===0) pumpkin(x+3.2,HOMES_Z-3.2,.7); else flowers(x+3,HOMES_Z-3.2,4);
+  homes.push(new THREE.Vector3(x,0,HOMES_Z-5)); homeInside.push({pos:new THREE.Vector3(x+.4,0,HOMES_Z+.4),yaw:Math.PI+.6});}
+for(let i=0;i<4;i++) lamp(0xffb060,.6,14,-60+i*40,3,HOMES_Z-6);
+
+// lamp posts, trees, extra halloween
+for(const [x,z] of [[-4,-8],[4,-8],[-4,9],[4,9]]) lampPost(x,z);
+for(let i=0;i<6;i++) pumpkin((Math.random()-.5)*10,PLAZA[2]+4+Math.random()*3,.6+Math.random()*.5,i%2===0);
+for(let i=0;i<40;i++){const x=(Math.random()-.5)*170,z=(Math.random()-.5)*70-6; if(Math.abs(x)<5||Math.abs(z)<5||Math.abs(x)>82) continue;
+  if(footprints.some(f=>Math.abs(x-f.x)<f.w&&Math.abs(z-f.z)<f.d)||z>HOMES_Z-11||(Math.abs(x)<13&&z<-30)) continue; (i%4===0?deadTree:tree)(x,z,.8+Math.random()*.6);}
+ghost(-40,-26); ghost(44,-28); ghost(-70,10);
+
+// ================== Harvest-style avatars ==================
+const SKIN=[0xfde0c4,0xf3c9a0,0xd9a577,0xb87a52];
+const PRESETS=[
+  {hair:'spiky',hc:0x6b4a2e,outfit:'overalls',oc:0x3a5fb0,sc:0xf4efe6,hat:null},
+  {hair:'long',hc:0x5a3a22,outfit:'dress',oc:0x4f7a3f,sc:0xe8d8b8,hat:'band'},
+  {hair:'bob',hc:0xe8c85a,outfit:'dress',oc:0xb8302a,sc:0xf4efe6,hat:'band'},
+  {hair:'short',hc:0x8a2a2a,outfit:'vest',oc:0xe07a2a,sc:0x3a5fb0,hat:null},
+  {hair:'short',hc:0x2a2a2a,outfit:'shirt',oc:0x4f8a5a,sc:0,hat:'cap'},
+  {hair:'short',hc:0xbdbdbd,outfit:'vest',oc:0x5a3a22,sc:0xf4efe6,hat:'hat'},
+  {hair:'ponytail',hc:0xf08ab0,outfit:'dress',oc:0x7a3a90,sc:0xf4efe6,hat:null},
+  {hair:'spiky',hc:0x2f4fb0,outfit:'shirt',oc:0xe8c85a,sc:0,hat:null},
+  {hair:'long',hc:0x1a1a1a,outfit:'dress',oc:0x2a8a8a,sc:0xf4efe6,hat:null},
+  {hair:'short',hc:0x6b4a2e,outfit:'overalls',oc:0x4f7a3f,sc:0xf4efe6,hat:'straw'},
+  {hair:'short',hc:0x1a1a1a,outfit:'shirt',oc:0xb8302a,sc:0,hat:'bandana'},
+  {hair:'pigtails',hc:0xe07a2a,outfit:'dress',oc:0x3a5fb0,sc:0xf4efe6,hat:null},
+  {hair:'bob',hc:0x5a3a22,outfit:'vest',oc:0x7a3a90,sc:0xe8d8b8,hat:'cap'},
+  {hair:'ponytail',hc:0xe8c85a,outfit:'overalls',oc:0x8a2a2a,sc:0xf4efe6,hat:null},
+];
+function makeChar(preset,skin,accent=0x9e9e9e){const g=new THREE.Group(); const skinM=toon({color:skin}); const hairM=toon({color:preset.hc}); const outM=toon({color:preset.oc}); const shirtM=toon({color:preset.sc||preset.oc});
+  if(preset.outfit==='dress'){const d=new THREE.Mesh(new THREE.CylinderGeometry(.42,.8,1.15,12),outM); d.position.y=.95; d.castShadow=true; g.add(d); g.add(box(.55,.7,.1,toon({color:0xf4efe6}),0,.72,.62,false));}
+  else {const b=new THREE.Mesh(new THREE.CylinderGeometry(.42,.55,1.0,10),shirtM); b.position.y=.95; b.castShadow=true; g.add(b);
+    if(preset.outfit==='overalls'){g.add(box(.7,.7,.1,outM,0,.8,.52,false)); g.add(box(.12,.6,.1,outM,-.25,1.25,.5,false)); g.add(box(.12,.6,.1,outM,.25,1.25,.5,false)); const lo=new THREE.Mesh(new THREE.CylinderGeometry(.5,.56,.5,10),outM); lo.position.y=.62; g.add(lo);}
+    if(preset.outfit==='vest'){g.add(box(.32,.8,.12,outM,-.28,1.0,.5,false)); g.add(box(.32,.8,.12,outM,.28,1.0,.5,false));}}
+  const scarf=new THREE.Mesh(new THREE.TorusGeometry(.42,.12,8,16),toon({color:accent})); scarf.rotation.x=Math.PI/2; scarf.position.y=1.5; g.add(scarf);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(.95,16,14),skinM); head.position.y=2.25; head.castShadow=true; g.add(head);
+  const cap=new THREE.Mesh(new THREE.SphereGeometry(1.0,16,12,0,Math.PI*2,0,Math.PI*(preset.hair==='bob'?.72:.58)),hairM); cap.position.y=2.3; g.add(cap);
+  if(preset.hair==='spiky'){for(let i=0;i<4;i++){const s=new THREE.Mesh(new THREE.ConeGeometry(.22,.6,6),hairM); s.position.set(-.45+i*.3,3.2,-.1+(i%2)*.2); s.rotation.z=(i-1.5)*.35; g.add(s);}}
+  if(preset.hair==='long'){g.add(box(1.5,1.4,.6,hairM,0,1.85,-.65,false));}
+  if(preset.hair==='ponytail'){const p=new THREE.Mesh(new THREE.SphereGeometry(.35,8,8),hairM); p.position.set(0,2.5,-.95); g.add(p); const t=new THREE.Mesh(new THREE.CylinderGeometry(.18,.28,1.1,8),hairM); t.position.set(0,1.95,-1.05); t.rotation.x=.3; g.add(t);}
+  if(preset.hair==='pigtails'){for(const sx of [-1,1]){const p=new THREE.Mesh(new THREE.SphereGeometry(.34,8,8),hairM); p.position.set(sx*1.0,2.1,-.2); g.add(p);}}
+  if(preset.hat==='band'){const b=new THREE.Mesh(new THREE.TorusGeometry(.98,.08,8,20),toon({color:0x1a1a1a})); b.rotation.x=Math.PI/2+.35; b.position.y=2.75; g.add(b);}
+  if(preset.hat==='cap'){const c=new THREE.Mesh(new THREE.SphereGeometry(1.03,16,12,0,Math.PI*2,0,Math.PI*.5),toon({color:0x2f4fb0})); c.position.y=2.35; g.add(c); g.add(box(1.1,.1,.7,toon({color:0x2f4fb0}),0,2.45,.95,false));}
+  if(preset.hat==='hat'){const c=new THREE.Mesh(new THREE.CylinderGeometry(.75,.8,.7,14),toon({color:0x3a2a1a})); c.position.y=3.35; g.add(c); const br=new THREE.Mesh(new THREE.CylinderGeometry(1.3,1.3,.08,18),toon({color:0x3a2a1a})); br.position.y=3.02; g.add(br);}
+  if(preset.hat==='straw'){const c=new THREE.Mesh(new THREE.ConeGeometry(.9,.8,14),toon({color:0xd9b25b})); c.position.y=3.35; g.add(c); const br=new THREE.Mesh(new THREE.CylinderGeometry(1.5,1.5,.08,18),toon({color:0xd9b25b})); br.position.y=3.0; g.add(br);}
+  if(preset.hat==='bandana'){const b=new THREE.Mesh(new THREE.SphereGeometry(1.02,16,12,0,Math.PI*2,0,Math.PI*.42),toon({color:0xb8302a})); b.position.y=2.35; g.add(b);}
+  for(const sx of [-1,1]){const w=new THREE.Mesh(new THREE.SphereGeometry(.2,10,10),glow(0xffffff)); w.scale.y=1.35; w.position.set(sx*.34,2.2,.82); g.add(w);
+    const ir=new THREE.Mesh(new THREE.SphereGeometry(.12,8,8),glow([0x2a5a2a,0x2a3a6a,0x4a2a1a,0x1a1a1a][(preset.hc>>4)&3])); ir.position.set(sx*.34,2.17,.98); g.add(ir);
+    const hl=new THREE.Mesh(new THREE.SphereGeometry(.045,6,6),glow(0xffffff)); hl.position.set(sx*.34+.05,2.26,1.08); g.add(hl);
+    const ch=new THREE.Mesh(new THREE.SphereGeometry(.13,8,8),toon({color:0xff9a9a})); ch.position.set(sx*.58,1.98,.7); g.add(ch);}
+  g.add(box(.22,.07,.05,toon({color:0x8a3a3a}),0,1.88,.93,false));
+  const a1=new THREE.Mesh(new THREE.CylinderGeometry(.13,.13,.7,8),shirtM); a1.position.set(-.6,1.0,0); a1.rotation.z=.25; const a2=a1.clone(); a2.position.x=.6; a2.rotation.z=-.25;
+  const legM=toon({color:preset.outfit==='overalls'?preset.oc:0x3a2f2a}); const l1=new THREE.Mesh(new THREE.CylinderGeometry(.16,.16,.5,8),legM); l1.position.set(-.22,.25,0); const l2=l1.clone(); l2.position.x=.22;
+  const b1=box(.36,.18,.42,toon({color:0x4a2a14}),-.22,.08,.05,false), b2=b1.clone(); b2.position.x=.22;
+  g.add(a1,a2,l1,l2,b1,b2); g.userData={legs:[l1,l2],arms:[a1,a2],scarf}; return g;}
+
+// ================== identity + agents ==================
+let nameBook={}; try{nameBook=JSON.parse(localStorage.getItem('town-names')||'{}');}catch(e){}
+function townName(id){if(!nameBook[id]){const used=new Set(Object.values(nameBook)); nameBook[id]=NAMES.find(n=>!used.has(n))||NAMES[Number(id)%NAMES.length]; try{localStorage.setItem('town-names',JSON.stringify(nameBook));}catch(e){}} return nameBook[id];}
+function identity(a){ if(a.name){ for(const [re,n,r] of ROLES) if(re.test(a.name)) return {name:n,role:r}; const p=a.name.split(/[-_ ]/); return {name:p[0][0].toUpperCase()+p[0].slice(1),role:p.slice(1).join(' ')||'Agent'}; }
+  const b=a.agency?buildings[a.agency]:null; return {name:townName(a.id),role:b?(a.folder&&a.folder!=='C--Vault'?a.folder:'Coordinator'):`Visitor · ${a.folder||'?'}`}; }
+const ACTIVITY=[['home',34],['coffee',20],['park',14],['spring',12],['rec',12],['library',8]];
+const ACT_LABEL={home:'resting at home',coffee:'at the café',park:'by the campfire',spring:'in the hot spring',rec:'in the rec room',library:'in the reading nook'};
+const agents=new Map(); let homeIdx=0;
+function agencyFor(name,folder,hint){
+  for(const a of AGENCIES){if(name&&a.match.test(name))return a.key;}
+  for(const a of AGENCIES){if(hint&&a.hint.test(hint))return a.key;}
+  for(const a of AGENCIES){if(folder&&a.key!=='agency'&&a.folders.test(folder))return a.key;}
+  if(!folder||folder==='C--Vault') return 'agency';
+  return null;}
+function freeSeat(seats,id,key){const taken=new Set([...agents.values()].filter(a=>a.id!==id&&a.spot&&a.spot.key===key).map(a=>a.spot.i)); for(let i=0;i<seats.length;i++) if(!taken.has(i)) return i; return null;}
+function recolor(a){const ag=a.agency?buildings[a.agency]:null; a.mesh.userData.scarf.material.color.set(ag?ag.accent:0x9e9e9e);}
+function upsert(id,patch={}){let a=agents.get(id); if(!a){const n=Number(id)||agents.size; a={id,name:null,folder:null,status:'waiting',tool:null,agency:null,spot:null,activity:null,activityUntil:0,homeI:homeIdx++%homes.length}; a.home=homes[a.homeI].clone(); a.mesh=makeChar(PRESETS[n%PRESETS.length],SKIN[(n*7)%SKIN.length]); a.mesh.position.copy(a.home); a.mesh.rotation.y=Math.PI; scene.add(a.mesh); agents.set(id,a);}
+  Object.assign(a,patch);
+  const key=agencyFor(a.name,a.folder,a.hint); if(key!==a.agency){a.agency=key; a.spot=null; recolor(a);}
+  const who=identity(a); a.who=who; const lines=[{t:who.name,px:26,c:'#f5e6c8'},{t:who.role,px:17,c:'#d9b57a'}]; if(a.tool) lines.push({t:a.statusText||a.tool,px:15,c:'#9fd0ff'});
+  const sig=lines.map(l=>l.t).join('|'); if(a.lblSig!==sig){if(a.lbl) a.mesh.remove(a.lbl); a.lbl=label(lines,a.tool?'#1f2a3f':'#2b1d12',a.tool?'#5a86b8':'#c98a3a'); a.lbl.position.y=3.9+a.lbl.userData.h/2; a.mesh.add(a.lbl); a.lblSig=sig;}
+  if(patch.status==='active'||patch.tool) a.lastActive=Date.now();
+  retarget(a); renderPanel();
+}
+function isWorking(a){return a.status==='active'||!!a.tool||(Date.now()-(a.lastActive||0)<45000);}
+function retarget(a){const working=isWorking(a), now=Date.now();
+  if(working&&a.agency){ if(a.activity!=='work'){a.activity='work'; a.spot=null;} const b=buildings[a.agency]; if(!a.spot){const i=freeSeat(b.seats,a.id,a.agency); if(i!=null) a.spot={key:a.agency,i};} const s=a.spot?b.seats[a.spot.i]:null; a.target=s?s.pos:new THREE.Vector3(b.pos[0],0,b.pos[2]+9); a.yaw=s?s.yaw:0; return; }
+  if(working){ a.activity='work'; a.spot=null; a.target=new THREE.Vector3(PLAZA[0]+(a.id%7-3)*2,0,PLAZA[2]+8); a.yaw=0; return; }
+  // off duty: rest at home or hang out around town, switching every 30–90 s
+  if(a.activity==='work'||!a.activity||now>a.activityUntil){
+    let r=Math.random()*100, pick='home'; for(const [k,w] of ACTIVITY){ if(r<w){pick=k;break;} r-=w; }
+    a.spot=null; if(pick!=='home'){const v=VENUES[pick]; const i=freeSeat(v.seats,a.id,pick); if(i!=null) a.spot={key:pick,i}; else pick='home';}
+    a.activity=pick; a.activityUntil=now+30000+Math.random()*60000;
+    if(pick==='home'){const h=homeInside[a.homeI]; a.target=h.pos; a.yaw=h.yaw;} else {const s=VENUES[pick].seats[a.spot.i]; a.target=s.pos; a.yaw=s.yaw;} }}
+function removeAgent(id){const a=agents.get(id); if(!a) return; scene.remove(a.mesh); agents.delete(id); renderPanel();}
+
+// ================== live feed from the pixel office (via serve.py relay) ==================
+const conn=document.getElementById('conn');
+async function connect(){
+  let token='';
+  try{const t=await (await fetch('/token.json')).json(); token=t.token||'';}catch(e){}
+  const ws=new WebSocket(`ws://${location.host}/ws${token?`?token=${encodeURIComponent(token)}`:''}`);
+  ws.onopen=()=>{conn.textContent='● live — the town is connected to the office'; conn.style.color='#8ad07a'; try{ws.send(JSON.stringify({type:'webviewReady'}));}catch(e){}};
+  ws.onclose=()=>{conn.textContent='○ office offline — retrying…'; conn.style.color='#ff8a5a'; setTimeout(connect,3000);};
+  ws.onmessage=(ev)=>{let m; try{m=JSON.parse(ev.data);}catch(e){return;} handle(m);};
+}
+function handle(m){
+  switch(m.type){
+    case 'existingAgents': (m.agents||[]).forEach(id=>{const meta=(m.agentMeta&&m.agentMeta[id])||{}; upsert(id,{name:meta.teammateName||meta.agentName||meta.terminalName||null,folder:(m.folderNames&&m.folderNames[id])||meta.folderName||'C--Vault',status:'waiting'});}); break;
+    case 'agentCreated': upsert(m.id,{name:m.teammateName||m.agentName||null,folder:m.folderName||'C--Vault',status:'active'}); break;
+    case 'agentTeamInfo': upsert(m.id,{name:m.agentName||undefined}); break;
+    case 'agentStatus': upsert(m.id,{status:m.status}); break;
+    case 'agentToolStart': { const st=(m.status||'').replace(/^(Using|Running:)\s*/,'').replace(/^mcp__.*?__(?=[a-z])/,'').slice(0,34); upsert(m.id,{tool:m.toolName||'working',statusText:st,hint:m.status||m.toolName||'',status:'active'}); break; }
+    case 'agentToolDone': upsert(m.id,{tool:null,statusText:null}); break;
+    case 'agentToolsClear': upsert(m.id,{tool:null,statusText:null}); break;
+    case 'subagentToolStart': upsert(m.id,{tool:'working',status:'active'}); break;
+    case 'subagentClear': upsert(m.id,{tool:null,status:'waiting'}); break;
+    case 'agentClosed': removeAgent(m.id); break;
+  }
+}
+
+// ================== roster panel + fly-to ==================
+const panel=document.getElementById('panel');
+function renderPanel(){
+  let h='';
+  const row=(a,cls)=>`<div class="a ${cls}"><span class="who">${a.who.name}</span><span class="role">${a.who.role}</span><div class="tool">${isWorking(a)?(a.statusText||a.tool||'active'):(ACT_LABEL[a.activity]||'off duty')}</div></div>`;
+  for(const b of Object.values(buildings)){
+    const inside=[...agents.values()].filter(a=>a.agency===b.key);
+    const working=inside.filter(a=>isWorking(a)), off=inside.filter(a=>!isWorking(a));
+    h+=`<div class="b" style="border-color:${hexTo(b.accent)}" data-k="${b.key}"><b>${b.name}</b><span class="n">${working.length} working · ${off.length} off duty</span>`;
+    for(const a of working) h+=row(a,''); for(const a of off) h+=row(a,'home'); h+=`</div>`;
+  }
+  const un=[...agents.values()].filter(a=>!a.agency);
+  if(un.length) h+=`<div class="b" style="border-color:#9e9e9e"><b>Town square (visitors)</b><span class="n">${un.length}</span>`+un.map(a=>row(a,isWorking(a)?'':'home')).join('')+`</div>`;
+  panel.innerHTML=h||'<div class="n">no one in town yet</div>';
+  panel.querySelectorAll('.b[data-k]').forEach(el=>el.onclick=()=>focusBuilding(el.dataset.k));
+}
+function focusBuilding(key){const b=buildings[key]; if(!b) return; cam.target.set(b.pos[0],2,b.pos[2]); cam.r=Math.min(cam.r,36);}
+
+// ================== input ==================
+let drag=null; canvas.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,moved:false};});
+window.addEventListener('pointermove',e=>{if(!drag) return; const dx=e.clientX-drag.x,dy=e.clientY-drag.y; if(Math.abs(dx)+Math.abs(dy)>3) drag.moved=true; if(e.buttons&2){cam.target.x-=dx*0.05*Math.cos(cam.theta);cam.target.z+=dx*0.05*Math.sin(cam.theta);cam.target.y=Math.max(0,cam.target.y+dy*0.03);} else {cam.theta-=dx*0.006; cam.phi=Math.min(1.45,Math.max(0.25,cam.phi-dy*0.006));} drag.x=e.clientX; drag.y=e.clientY;});
+window.addEventListener('pointerup',e=>{ if(drag&&!drag.moved) pick(e); drag=null; });
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+canvas.addEventListener('wheel',e=>{cam.r=Math.min(160,Math.max(12,cam.r*(e.deltaY>0?1.1:0.9)));},{passive:true});
+window.addEventListener('keydown',e=>{if(e.key==='h'||e.key==='H') panel.style.display=panel.style.display==='none'?'':'none';});
+const ray=new THREE.Raycaster(), ndc=new THREE.Vector2();
+function pick(e){ndc.set((e.clientX/innerWidth)*2-1,-(e.clientY/innerHeight)*2+1); ray.setFromCamera(ndc,camera); const hits=ray.intersectObjects(Object.values(buildings).map(b=>b.body)); if(hits.length){const key=Object.values(buildings).find(b=>b.body===hits[0].object).key; focusBuilding(key);}}
+
+// ================== clock + loops ==================
+function clock(){const d=new Date(); const m=d.getMonth(); document.getElementById('season').textContent=['Winter','Winter','Spring','Spring','Spring','Summer','Summer','Summer','Fall','Fall','Fall','Winter'][m]+' 🎃'; document.getElementById('time').textContent=d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}); document.getElementById('day').textContent=d.toLocaleDateString([], {weekday:'short',day:'numeric'});}
+setInterval(clock,10000); clock();
+function resize(){const w=innerWidth,h=innerHeight; renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix();} addEventListener('resize',resize); resize();
+let lastSim=performance.now(), lastRetarget=0;
+function simulate(){const now=performance.now(); const dt=Math.min(1.0,(now-lastSim)/1000); lastSim=now;
+  if(now-lastRetarget>2000){lastRetarget=now; for(const a of agents.values()) retarget(a); renderPanel();}
+  for(const a of agents.values()){ if(!a.target) continue; const p=a.mesh.position, t=a.target; const d=new THREE.Vector3(t.x-p.x,0,t.z-p.z); const dist=d.length(); const {legs,arms}=a.mesh.userData;
+    if(dist>0.15){ d.normalize(); const step=Math.min(dist,7*dt); p.x+=d.x*step; p.z+=d.z*step; a.mesh.rotation.y=Math.atan2(d.x,d.z); const s=Math.sin(now/90); a.mesh.position.y=Math.abs(s)*0.12; legs[0].rotation.x=s*.7; legs[1].rotation.x=-s*.7; arms[0].rotation.x=-s*.5; arms[1].rotation.x=s*.5; }
+    else { a.mesh.position.y=0; legs[0].rotation.x=legs[1].rotation.x=arms[0].rotation.x=arms[1].rotation.x=0; a.mesh.rotation.y=a.yaw??Math.PI; } }}
+setInterval(simulate,50);
+function tick(){const t=performance.now()/1000; for(const b of bats){const u=b.userData; b.position.set(u.cx+Math.cos(t*u.sp+u.ph)*u.r,u.y+Math.sin(t*2+u.ph)*1.5,u.cz+Math.sin(t*u.sp+u.ph)*u.r); b.rotation.y=-(t*u.sp+u.ph); b.children[0].rotation.y=Math.sin(t*14)*.6; b.children[1].rotation.y=-Math.sin(t*14)*.6;}
+  for(const g of ghosts){const u=g.userData; g.position.set(u.x+Math.sin(t*.5+u.ph)*2,2+Math.sin(t*1.3+u.ph)*.6,u.z+Math.cos(t*.4+u.ph)*2); g.rotation.y=Math.sin(t*.7+u.ph);}
+  if(fire.light){fire.light.intensity=1.6+Math.sin(t*9)*.25+Math.sin(t*23)*.15; fire.mesh.scale.y=1+Math.sin(t*11)*.12;}
+  placeCam(); renderer.render(scene,camera); requestAnimationFrame(tick);}
+requestAnimationFrame(tick); connect(); renderPanel();
+</script></body></html>
