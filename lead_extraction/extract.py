@@ -39,7 +39,12 @@ REQUIRED_FIELDS = ["first_name", "last_name", "charge"]
 
 
 def missing_required(case: dict) -> list:
-    return [key for key in REQUIRED_FIELDS if not str(case.get(key, "")).strip()]
+    missing = []
+    for key in REQUIRED_FIELDS:
+        value = case.get(key)
+        if value is None or not str(value).strip():
+            missing.append(key)
+    return missing
 
 
 def open_sheet(sheet_id: str, creds_path: str, worksheet_name: str):
@@ -56,7 +61,7 @@ def open_sheet(sheet_id: str, creds_path: str, worksheet_name: str):
 
 
 def case_to_row(case: dict) -> list:
-    return [case.get(key, "") for key in FIELD_KEYS]
+    return ["" if case.get(key) is None else case.get(key) for key in FIELD_KEYS]
 
 
 def prompt_for_case() -> dict:
