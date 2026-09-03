@@ -35,6 +35,12 @@ FIELD_KEYS = [
     "arrest_date",
 ]
 
+REQUIRED_FIELDS = ["first_name", "last_name", "charge"]
+
+
+def missing_required(case: dict) -> list:
+    return [key for key in REQUIRED_FIELDS if not str(case.get(key, "")).strip()]
+
 
 def open_sheet(sheet_id: str, creds_path: str, worksheet_name: str):
     creds = Credentials.from_service_account_file(creds_path, scopes=SCOPES)
@@ -84,21 +90,32 @@ def main():
     parser.add_argument("--arrest-date", default="")
     args = parser.parse_args()
 
-    ws = open_sheet(args.sheet_id, args.creds, args.worksheet)
-
     rows_to_add = []
 
     if args.interactive:
         while True:
             case = prompt_for_case()
             if any(case.values()):
-                rows_to_add.append(case_to_row(case))
+                missing = missing_required(case)
+                if missing:
+                    print(f"  Missing required field(s): {', '.join(missing)} — not added.")
+                else:
+                    rows_to_add.append(case_to_row(case))
             again = input("Add another case? [y/N]: ").strip().lower()
             if again != "y":
                 break
     elif args.json_file:
         with open(args.json_file) as f:
             cases = json.load(f)
+        errors = []
+        for i, case in enumerate(cases):
+            missing = missing_required(case)
+            if missing:
+                errors.append(f"  case #{i}: missing {', '.join(missing)}")
+        if errors:
+            print("Aborting — some cases are missing required fields:", file=sys.stderr)
+            print("\n".join(errors), file=sys.stderr)
+            sys.exit(1)
         for case in cases:
             rows_to_add.append(case_to_row(case))
     elif args.first_name and args.last_name and args.charge:
@@ -118,6 +135,7 @@ def main():
         print("Nothing to add.")
         sys.exit(0)
 
+    ws = open_sheet(args.sheet_id, args.creds, args.worksheet)
     ws.append_rows(rows_to_add, value_input_option="USER_ENTERED")
     print(f"Added {len(rows_to_add)} row(s) to worksheet '{args.worksheet}'.")
 
