@@ -9,10 +9,11 @@ as the client's own first-person statutory request (the client is the
 
 See `statutes.py`. Each entry is either `"verified"` (citation, deadline,
 and penalty all confirmed) or `"partial"` (citation and fee-prohibition
-confirmed; deadline/penalty not confirmed — usually left blank rather than
-guessed, though TX carries an unconfirmed figure). Every `"partial"` state's
-letter says so explicitly and asks the operator to verify current statutory
-text before sending. Currently: FL (verified),
+confirmed; deadline/penalty not confirmed and left blank rather than
+guessed). Every `"partial"` state's letter says so explicitly and asks the
+operator to verify current statutory text before sending. Note that a
+`"partial"` entry may be wrong about what its statute does at all, not just
+missing numbers — see the TX note in `statutes.py`. Currently: FL (verified),
 CA, TX, GA, UT, OR, CO, IL, WY (partial). Run `python main.py list-states`
 for the full data. Adding a new state means adding a real, sourced entry to
 `statutes.py` — not extrapolating from another state's numbers.
