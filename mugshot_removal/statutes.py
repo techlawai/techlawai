@@ -10,7 +10,11 @@ real correspondence; state legislatures amend and renumber these regularly.
 confidence:
   "verified"   -> citation, deadline, and penalty confirmed from research
   "partial"    -> citation and fee-prohibition confirmed; deadline/penalty
-                  not confirmed, left as None
+                  NOT confirmed. Left as None where research turned up
+                  nothing; where an unconfirmed figure is recorded anyway
+                  (TX), it is still unverified. Either way the generated
+                  letter carries a note telling the operator to verify the
+                  statute before sending -- see draft.py.
 """
 
 STATE_STATUTES = {

@@ -30,7 +30,7 @@ Arresting agency: {arresting_agency}
 Please confirm removal in writing. If the photograph is not removed within
 {deadline_days} calendar days of the date of this request, I am entitled
 under {citation} to pursue: {penalty_description}.
-
+{operator_note}
 Sincerely,
 {client_name}
 {client_contact}
@@ -69,6 +69,16 @@ Sincerely,
 Date of this request: {request_date}
 """
 
+# Used with TEMPLATE_WITH_DEADLINE for states whose entry carries a deadline
+# but is not fully confirmed -- the deadline/penalty figures still get stated,
+# but not as though they'd been verified.
+UNCONFIRMED_STATUTE_NOTE = """
+[NOTE TO OPERATOR: {state_name}'s entry is marked "{confidence}" -- its
+deadline and penalty figures were not confirmed for this tool. Verify current
+statutory text for {state_name} before sending, and correct the figures above
+if they are wrong.]
+"""
+
 
 def generate_letter(
     client_name: str,
@@ -95,11 +105,17 @@ def generate_letter(
 
     if statute["removal_deadline_days"] is not None:
         deadline = request_date + timedelta(days=statute["removal_deadline_days"])
+        operator_note = ""
+        if statute["confidence"] != "verified":
+            operator_note = UNCONFIRMED_STATUTE_NOTE.format(
+                state_name=statute["name"], confidence=statute["confidence"]
+            )
         return TEMPLATE_WITH_DEADLINE.format(
             **common,
             deadline_days=statute["removal_deadline_days"],
             penalty_description=statute["penalty_description"] or "the remedies available under this statute",
             deadline=deadline.isoformat(),
+            operator_note=operator_note,
         )
 
     return TEMPLATE_NO_DEADLINE.format(**common)
