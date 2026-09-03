@@ -103,12 +103,8 @@ class TestLogRequest:
             "Deadline": "2026-08-29",
             "Status": "Pending",
             "Notes": "",
-            "Registrant Org": "",
-            "Registrant Name": "",
-            "Registrant Email": "",
-            "Registrar": "",
-            "Hosting Org": "",
-            "Hosting Abuse Email": "",
+            # Every lookup column starts blank; check-overdue fills them in.
+            **{label: "" for label, _, _ in tracker.LOOKUP_FIELDS},
         }
 
     def test_deadline_is_computed_from_the_sent_date(self, tracker_worksheet):
@@ -242,12 +238,25 @@ class TestRecordOwnerInfo:
             "registrant_name": "Jane Registrant",
             "registrant_email": "admin@example-site.test",
             "registrar": "Example Registrar Inc",
+            "country": "US",
         },
         "hosting_info": {
             "hosting_org": "Example Hosting",
             "abuse_email": "abuse@example-hosting.test",
+            "hosting_country": "NL",
+            "hosting_address": "1 Example Way, Amsterdam",
         },
     }
+
+    def lookup_range(self, row):
+        """The range record_owner_info should write, derived from the layout
+        so a column added to HEADER cannot silently desync this test."""
+        first = tracker._column_letter(len(tracker.REQUEST_FIELDS))
+        last = tracker._column_letter(len(tracker.HEADER) - 1)
+        return f"{first}{row}:{last}{row}"
+
+    def blanks(self):
+        return [""] * len(tracker.LOOKUP_FIELDS)
 
     def test_writes_lookup_columns_for_the_matching_row(self):
         worksheet = FakeWorksheet()
@@ -261,19 +270,37 @@ class TestRecordOwnerInfo:
         )
         assert worksheet.updates == [
             (
-                "J7:O7",
+                self.lookup_range(7),
                 [
                     [
                         "Example Holdings LLC",
                         "Jane Registrant",
                         "admin@example-site.test",
                         "Example Registrar Inc",
+                        "US",
                         "Example Hosting",
                         "abuse@example-hosting.test",
+                        "NL",
+                        "1 Example Way, Amsterdam",
                     ]
                 ],
             )
         ]
+
+    def test_written_values_line_up_with_their_headers(self):
+        worksheet = FakeWorksheet()
+        worksheet.set_find_results("https://example-site.test/jane", [FakeCell(row=7)])
+
+        tracker.record_owner_info(
+            worksheet, "https://example-site.test/jane", self.LOOKUP
+        )
+
+        _, values = worksheet.updates[0]
+        labels = [label for label, _, _ in tracker.LOOKUP_FIELDS]
+        written = dict(zip(labels, values[0]))
+        assert written["Registrant Country"] == "US"
+        assert written["Hosting Country"] == "NL"
+        assert written["Hosting Org"] == "Example Hosting"
 
     def test_uses_the_most_recent_matching_row(self):
         worksheet = FakeWorksheet()
@@ -286,7 +313,7 @@ class TestRecordOwnerInfo:
             worksheet, "https://example-site.test/jane", self.LOOKUP
         )
 
-        assert worksheet.updates[0][0] == "J12:O12"
+        assert worksheet.updates[0][0] == self.lookup_range(12)
 
     def test_reports_failure_when_the_url_is_not_in_the_sheet(self):
         worksheet = FakeWorksheet()
@@ -307,7 +334,7 @@ class TestRecordOwnerInfo:
             {"domain_info": {"error": "no whois"}, "hosting_info": {}},
         )
 
-        assert worksheet.updates == [("J4:O4", [["", "", "", "", "", ""]])]
+        assert worksheet.updates == [(self.lookup_range(4), [self.blanks()])]
 
     def test_handles_a_lookup_with_no_sections_at_all(self):
         worksheet = FakeWorksheet()
@@ -315,7 +342,7 @@ class TestRecordOwnerInfo:
 
         tracker.record_owner_info(worksheet, "https://example-site.test/jane", {})
 
-        assert worksheet.updates == [("J4:O4", [["", "", "", "", "", ""]])]
+        assert worksheet.updates == [(self.lookup_range(4), [self.blanks()])]
 
     def test_null_lookup_values_become_blank(self):
         # WHOIS routinely returns None for privacy-shielded fields.
@@ -331,4 +358,44 @@ class TestRecordOwnerInfo:
             },
         )
 
-        assert worksheet.updates == [("J4:O4", [["", "", "", "R", "", ""]])]
+        expected = self.blanks()
+        expected[3] = "R"
+        assert worksheet.updates == [(self.lookup_range(4), [expected])]
+
+    def test_null_section_does_not_crash(self):
+        worksheet = FakeWorksheet()
+        worksheet.set_find_results("https://example-site.test/jane", [FakeCell(row=4)])
+
+        tracker.record_owner_info(
+            worksheet,
+            "https://example-site.test/jane",
+            {"domain_info": None, "hosting_info": None},
+        )
+
+        assert worksheet.updates == [(self.lookup_range(4), [self.blanks()])]
+
+
+class TestColumnLetter:
+    def test_maps_indices_to_spreadsheet_columns(self):
+        assert tracker._column_letter(0) == "A"
+        assert tracker._column_letter(9) == "J"
+        assert tracker._column_letter(25) == "Z"
+        assert tracker._column_letter(26) == "AA"
+        assert tracker._column_letter(27) == "AB"
+
+
+class TestHeaderLayout:
+    def test_header_is_request_fields_then_lookup_fields(self):
+        assert tracker.HEADER == tracker.REQUEST_FIELDS + [
+            label for label, _, _ in tracker.LOOKUP_FIELDS
+        ]
+
+    def test_lookup_labels_are_unique(self):
+        labels = [label for label, _, _ in tracker.LOOKUP_FIELDS]
+        assert len(labels) == len(set(labels))
+
+    def test_publisher_location_is_captured(self):
+        labels = [label for label, _, _ in tracker.LOOKUP_FIELDS]
+        assert "Registrant Country" in labels
+        assert "Hosting Country" in labels
+        assert "Hosting Address" in labels

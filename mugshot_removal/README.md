@@ -7,16 +7,33 @@ as the client's own first-person statutory request (the client is the
 
 ## Supported states
 
-See `statutes.py`. Each entry is either `"verified"` (citation, deadline,
-and penalty all confirmed) or `"partial"` (citation and fee-prohibition
-confirmed; deadline/penalty not confirmed and left blank rather than
-guessed). Every `"partial"` state's letter says so explicitly and asks the
-operator to verify current statutory text before sending. Note that a
-`"partial"` entry may be wrong about what its statute does at all, not just
-missing numbers — see the TX note in `statutes.py`. Currently: FL (verified),
-CA, TX, GA, UT, OR, CO, IL, WY (partial). Run `python main.py list-states`
-for the full data. Adding a new state means adding a real, sourced entry to
-`statutes.py` — not extrapolating from another state's numbers.
+See `statutes.py`. Every entry carries a `confidence` level, and that level
+decides what the letter is allowed to assert:
+
+| Level | States | Letter asserts |
+|---|---|---|
+| `verified` | FL | The statute, its removal deadline, and the noncompliance remedy |
+| `partial` | CA, GA | The statute and its fee prohibition, plus an operator-verify note |
+| `unverified` | TX, UT, OR, CO, IL, WY | **Nothing.** No statute is cited and no entitlement is claimed — it is a plain request to remove, plus an operator-verify note |
+
+An `unverified` entry is not just missing numbers — it means no statutory
+basis this letter could assert has been confirmed for that state. A 2026
+audit found all six citing either an unrelated statute (OR pointed at
+Oregon's improper-disclosure action, CO at the criminal code's firearms
+article, IL at the Unified Code of Corrections, WY at a placeholder) or one
+that regulates somebody other than the publisher (UT binds sheriffs; TX ch.
+109 is a dispute-accuracy regime). Each entry records the citation research
+now points to, as a starting point for whoever verifies it — the letter does
+not use it. Run `python main.py list-states` for the full data.
+
+Adding a state, or promoting one, means confirming against primary statutory
+text what the statute grants **and against whom** — not extrapolating from
+another state's numbers, and not from secondary summaries.
+
+Two live caveats on the `partial` states, both recorded in `statutes.py`:
+CA bars charging for removal but imposes no duty to remove; GA's right is
+conditional on the disposition of the charges and its written request may
+have to go by certified mail, which this tool does not do.
 
 ## Setup
 
@@ -90,6 +107,15 @@ still needs an actual attorney to file. This tool's job stops at handing
 that attorney the request's overdue status plus who to name/contact
 (registrant and hosting org, where WHOIS/RDAP data isn't privacy-shielded).
 
+**Where the publisher sits** is recorded alongside that: the tracker's
+`Registrant Country`, `Hosting Country` and `Hosting Address` columns come
+from the same WHOIS/RDAP pass. That matters for two decisions the attorney
+makes — venue, and which state's law actually reaches the publisher, which
+need not be the state the client was arrested in. Treat it as a lead, not a
+finding: registrant country comes from a WHOIS record that is frequently
+privacy-shielded, and the hosting country is where the *network* is
+registered, which is often a CDN or a datacenter rather than the operator.
+
 Look up registrant/hosting info for a single URL directly:
 ```
 python main.py lookup-owner --target-url "https://example-mugshot-site.com/jane-public"
@@ -114,5 +140,12 @@ and never send mail.
   without one.
 - No claim of copyright ownership over the photograph is made anywhere in
   the letter; the basis is the client's own right under the applicable
-  statute.
+  statute, or — for `unverified` states — no legal basis is claimed at all.
+- **Never fall back to a DMCA takedown.** The booking photograph is the
+  arresting agency's work; the client does not own it. 17 U.S.C.
+  § 512(c)(3)(A) requires the sender to state *under penalty of perjury*
+  that they own the copyright or act for the owner, and § 512(f) makes a
+  knowing misrepresentation actionable for damages, costs and fees. These
+  letters go out in the client's own name, so that exposure would land on
+  the client. `test_draft.py` enforces this on every generated letter.
 - Finding pages uses Google's Custom Search API, not scraped search results.

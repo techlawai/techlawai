@@ -1,4 +1,5 @@
 """Tests for draft.py -- the generated removal request letter."""
+import re
 from datetime import date
 
 import pytest
@@ -9,6 +10,12 @@ from statutes import STATE_STATUTES
 REQUEST_DATE = date(2026, 8, 19)
 
 OPERATOR_NOTE_MARKER = "[NOTE TO OPERATOR:"
+
+
+def recipient_text(letter):
+    """The letter minus the operator note -- i.e. what the site actually reads,
+    and the only part that can assert anything on the client's behalf."""
+    return re.sub(r"\[NOTE TO OPERATOR:.*?\]", "", letter, flags=re.DOTALL)
 
 
 def letter_for(state, **overrides):
@@ -144,6 +151,76 @@ class TestConfidenceIsSurfaced:
         assert OPERATOR_NOTE_MARKER not in letter_for(state)
 
 
+UNVERIFIED_STATES = sorted(
+    s for s, v in STATE_STATUTES.items() if v["confidence"] == "unverified"
+)
+
+
+class TestUnverifiedStates:
+    """A state with no confirmed statutory hook gets a plain request: it asks,
+    it does not claim. Nothing in it may read as a legal entitlement."""
+
+    @pytest.mark.parametrize("state", UNVERIFIED_STATES)
+    def test_cites_no_statute(self, state):
+        body = recipient_text(letter_for(state))
+
+        assert STATE_STATUTES[state]["citation"] not in body
+        assert "Pursuant to" not in body
+        assert "Under " not in body
+
+    @pytest.mark.parametrize("state", UNVERIFIED_STATES)
+    def test_claims_no_entitlement_or_penalty(self, state):
+        body = recipient_text(letter_for(state))
+
+        assert "I am entitled" not in body
+        assert "calendar days" not in body
+        assert "Deadline for removal:" not in body
+        assert "may not charge a fee" not in body
+
+    @pytest.mark.parametrize("state", UNVERIFIED_STATES)
+    def test_makes_no_copyright_or_dmca_claim(self, state):
+        # A booking photo is the arresting agency's work, and a DMCA notice is
+        # sworn under penalty of perjury (17 U.S.C. § 512(c)(3)(A)) with
+        # § 512(f) exposure for misrepresentation. These letters go out in the
+        # client's own name, so this must never reach the recipient.
+        body = recipient_text(letter_for(state)).lower()
+
+        assert "copyright" not in body
+        assert "dmca" not in body
+        assert "infring" not in body
+        assert "penalty of perjury" not in body
+
+    @pytest.mark.parametrize("state", UNVERIFIED_STATES)
+    def test_still_asks_for_removal_in_the_clients_voice(self, state):
+        letter = letter_for(state)
+
+        assert "My name is Jane Public" in letter
+        assert "I am the person depicted" in letter
+        assert "remove that photograph" in letter
+        assert "https://example-site.test/jane-public" in letter
+
+    @pytest.mark.parametrize("state", UNVERIFIED_STATES)
+    def test_warns_the_operator(self, state):
+        letter = letter_for(state)
+
+        assert OPERATOR_NOTE_MARKER in letter
+        assert STATE_STATUTES[state]["name"] in letter
+
+    @pytest.mark.parametrize("state", UNVERIFIED_STATES)
+    def test_operator_note_warns_against_a_dmca_fallback(self, state):
+        assert "DMCA" in letter_for(state)
+
+    def test_carries_booking_details(self):
+        letter = letter_for(
+            UNVERIFIED_STATES[0],
+            booking_date="2026-07-04",
+            arresting_agency="Travis County Sheriff's Office",
+        )
+
+        assert "Booking date: 2026-07-04" in letter
+        assert "Arresting agency: Travis County Sheriff's Office" in letter
+
+
 class TestStateSelection:
     def test_defaults_to_florida(self):
         letter = generate_letter(
@@ -166,7 +243,14 @@ class TestStateSelection:
     def test_every_supported_state_renders(self, state):
         letter = letter_for(state)
 
-        assert STATE_STATUTES[state]["citation"] in letter
         assert "Jane Public" in letter
+        assert "https://example-site.test/jane-public" in letter
         # No unfilled template placeholders left behind.
         assert "{" not in letter
+
+    @pytest.mark.parametrize(
+        "state",
+        sorted(s for s, v in STATE_STATUTES.items() if v["confidence"] != "unverified"),
+    )
+    def test_asserting_states_cite_their_statute(self, state):
+        assert STATE_STATUTES[state]["citation"] in letter_for(state)

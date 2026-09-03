@@ -1,7 +1,7 @@
 """Tests for statutes.py -- the state statute table and its lookup."""
 import pytest
 
-from statutes import STATE_STATUTES, get_statute
+from statutes import CONFIDENCE_LEVELS, STATE_STATUTES, get_statute
 
 REQUIRED_KEYS = {
     "name",
@@ -42,17 +42,30 @@ class TestStatuteTable:
 
     @pytest.mark.parametrize("state", sorted(STATE_STATUTES))
     def test_confidence_is_a_known_level(self, state):
-        assert STATE_STATUTES[state]["confidence"] in {"verified", "partial"}
+        assert STATE_STATUTES[state]["confidence"] in CONFIDENCE_LEVELS
 
     @pytest.mark.parametrize("state", sorted(STATE_STATUTES))
     def test_citation_is_present(self, state):
         assert STATE_STATUTES[state]["citation"].strip()
 
-    @pytest.mark.parametrize("state", sorted(STATE_STATUTES))
-    def test_only_fee_prohibiting_states_are_listed(self, state):
-        # The whole table exists to back a fee-prohibition argument; an entry
-        # without one does not belong here.
+    @pytest.mark.parametrize(
+        "state",
+        sorted(s for s, v in STATE_STATUTES.items() if v["confidence"] != "unverified"),
+    )
+    def test_asserting_states_prohibit_a_fee(self, state):
+        # A letter that asserts the fee prohibition must be backed by a state
+        # that actually has one. Unverified states assert nothing, so they are
+        # exempt -- OR reportedly permits a fee of up to $50.
         assert STATE_STATUTES[state]["fee_prohibited"] is True
+
+    @pytest.mark.parametrize(
+        "state",
+        sorted(s for s, v in STATE_STATUTES.items() if v["confidence"] == "unverified"),
+    )
+    def test_unverified_states_assert_no_figures(self, state):
+        # Nothing may be carried that the letter could state as fact.
+        assert STATE_STATUTES[state]["removal_deadline_days"] is None
+        assert STATE_STATUTES[state]["penalty_description"] is None
 
     @pytest.mark.parametrize("state", sorted(STATE_STATUTES))
     def test_state_codes_are_two_letters(self, state):

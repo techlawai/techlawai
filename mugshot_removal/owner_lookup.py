@@ -56,7 +56,7 @@ def get_hosting_info(url: str) -> dict:
     except Exception as e:
         return {"domain": domain, "ip": ip, "error": str(e)}
 
-    network = result.get("network", {})
+    network = result.get("network") or {}
     return {
         "domain": domain,
         "ip": ip,
@@ -64,7 +64,29 @@ def get_hosting_info(url: str) -> dict:
         "asn": result.get("asn"),
         "asn_description": result.get("asn_description"),
         "abuse_email": _extract_abuse_email(result),
+        # Where the host sits, for venue and for which state's law reaches the
+        # publisher. RDAP's network country is the more specific of the two;
+        # the ASN's registration country is the fallback.
+        "hosting_country": network.get("country") or result.get("asn_country_code"),
+        "hosting_address": _join_address(_registrant_entity(result)),
     }
+
+
+def _registrant_entity(rdap_result: dict) -> dict:
+    """The RDAP entity holding the network, where one is marked."""
+    for entity in (rdap_result.get("objects") or {}).values():
+        roles = entity.get("roles") or []
+        if "registrant" in roles or "administrative" in roles:
+            return entity
+    return {}
+
+
+def _join_address(entity: dict) -> str:
+    """RDAP addresses arrive as a list of line dicts; flatten to one line."""
+    contact = entity.get("contact") or {}
+    address = contact.get("address") or []
+    lines = [str(part.get("value", "")).strip() for part in address if part]
+    return ", ".join(line.replace("\n", ", ") for line in lines if line)
 
 
 def _extract_abuse_email(rdap_result: dict) -> str:

@@ -114,14 +114,21 @@ class TestGetDomainInfo:
 
 class TestGetHostingInfo:
     RDAP = {
-        "network": {"name": "EXAMPLE-HOSTING-NET"},
+        "network": {"name": "EXAMPLE-HOSTING-NET", "country": "NL"},
         "asn": "64500",
         "asn_description": "EXAMPLE-HOSTING, US",
+        "asn_country_code": "US",
         "objects": {
             "ABUSE-EX": {
                 "roles": ["abuse"],
                 "contact": {"email": [{"value": "abuse@example-hosting.test"}]},
-            }
+            },
+            "REG-EX": {
+                "roles": ["registrant"],
+                "contact": {
+                    "address": [{"value": "1 Example Way\nAmsterdam"}],
+                },
+            },
         },
     }
 
@@ -137,6 +144,8 @@ class TestGetHostingInfo:
             "asn": "64500",
             "asn_description": "EXAMPLE-HOSTING, US",
             "abuse_email": "abuse@example-hosting.test",
+            "hosting_country": "NL",
+            "hosting_address": "1 Example Way, Amsterdam",
         }
 
     def test_resolves_the_host_then_looks_up_the_ip(self, fake_rdap):
@@ -146,6 +155,66 @@ class TestGetHostingInfo:
 
         assert calls["dns"] == ["example-site.test"]
         assert calls["rdap"] == ["203.0.113.10"]
+
+    def test_prefers_the_network_country(self, fake_rdap):
+        # The network's own country is more specific than the ASN's country of
+        # registration, which can be a different jurisdiction entirely.
+        fake_rdap(rdap={"network": {"country": "NL"}, "asn_country_code": "US"})
+
+        assert get_hosting_info("example-site.test")["hosting_country"] == "NL"
+
+    def test_falls_back_to_asn_country(self, fake_rdap):
+        fake_rdap(rdap={"network": {}, "asn_country_code": "US"})
+
+        assert get_hosting_info("example-site.test")["hosting_country"] == "US"
+
+    def test_country_is_none_when_rdap_gives_neither(self, fake_rdap):
+        fake_rdap(rdap={"network": {}})
+
+        assert get_hosting_info("example-site.test")["hosting_country"] is None
+
+    def test_null_network_section_does_not_crash(self, fake_rdap):
+        fake_rdap(rdap={"network": None, "asn_country_code": "US"})
+
+        info = get_hosting_info("example-site.test")
+
+        assert info["hosting_country"] == "US"
+        assert info["hosting_org"] is None
+
+    def test_address_is_flattened_to_one_line(self, fake_rdap):
+        fake_rdap(
+            rdap={
+                "objects": {
+                    "REG": {
+                        "roles": ["registrant"],
+                        "contact": {"address": [{"value": "1 Example Way\nAmsterdam"}]},
+                    }
+                }
+            }
+        )
+
+        info = get_hosting_info("example-site.test")
+
+        assert info["hosting_address"] == "1 Example Way, Amsterdam"
+
+    def test_address_falls_back_to_the_administrative_entity(self, fake_rdap):
+        fake_rdap(
+            rdap={
+                "objects": {
+                    "ADM": {
+                        "roles": ["administrative"],
+                        "contact": {"address": [{"value": "2 Admin Rd"}]},
+                    }
+                }
+            }
+        )
+
+        assert get_hosting_info("example-site.test")["hosting_address"] == "2 Admin Rd"
+
+    def test_address_is_blank_when_rdap_has_none(self, fake_rdap):
+        fake_rdap(rdap={"objects": {"AB": {"roles": ["abuse"]}}})
+
+        assert get_hosting_info("example-site.test")["hosting_address"] == ""
 
     def test_falls_back_to_asn_description_for_hosting_org(self, fake_rdap):
         fake_rdap(rdap={"asn_description": "EXAMPLE-HOSTING, US", "network": {}})

@@ -69,6 +69,41 @@ Sincerely,
 Date of this request: {request_date}
 """
 
+"""Used for "unverified" states: no statute is cited and no legal entitlement
+is claimed, because none has been confirmed for that state. It is a plain
+first-person request. Deliberately NOT a DMCA notice -- see statutes.py."""
+TEMPLATE_NO_STATUTE = """\
+Subject: Request for Removal of Booking Photograph
+
+To Whom It May Concern:
+
+My name is {client_name}. I am the person depicted in the arrest booking
+photograph that currently appears on your website at the following URL:
+
+{target_url}
+
+I am writing to ask you to remove that photograph and to stop publishing it.
+
+Booking date: {booking_date}
+Arresting agency: {arresting_agency}
+
+Please confirm removal in writing.
+
+[NOTE TO OPERATOR: this letter cites no statute and claims no legal
+entitlement, because no statutory basis for {state_name} has been confirmed
+for this tool -- see that state's entry in statutes.py, which records where
+to look. Verify {state_name}'s current law before adding any statutory
+demand. Do NOT add a copyright or DMCA claim: the booking photograph is the
+arresting agency's work, the client does not hold its copyright, and a DMCA
+notice is sworn under penalty of perjury.]
+
+Sincerely,
+{client_name}
+{client_contact}
+
+Date of this request: {request_date}
+"""
+
 # Used with TEMPLATE_WITH_DEADLINE for states whose entry carries a deadline
 # but is not fully confirmed -- the deadline/penalty figures still get stated,
 # but not as though they'd been verified.
@@ -102,6 +137,9 @@ def generate_letter(
         request_date=request_date.isoformat(),
         state_name=statute["name"],
     )
+
+    if statute["confidence"] == "unverified":
+        return TEMPLATE_NO_STATUTE.format(**common)
 
     if statute["removal_deadline_days"] is not None:
         deadline = request_date + timedelta(days=statute["removal_deadline_days"])
