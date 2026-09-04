@@ -30,24 +30,41 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 // ================== AGENCIES = cottages in town ==================
+// A session lands at a building by, in order: its agent slug (`match`), its
+// project folder (`folders`), or words seen in its tool activity (`hint`).
+// Since most of this work happens inside one repo, `hint` on the file paths
+// being touched is what actually separates the desks day to day.
+//
+// The FIRST entry is the catch-all: a session with no slug match working from
+// a default folder walks here. Unmatched sessions from other folders wait in
+// the town square, so keep the main office first.
 const AGENCIES = [
-  {key:'agency', name:'Rebel Tech Agency', wall:0xd9c3a0, roof:0x8a4a1f, pos:[-24,0,-16],
-   match:/hunter|vale|gia|dante|lucy|rocky|scout|closer|mailer|builder|invoicer/i, folders:/^C--Vault$/,
-   hint:/Agents[\\/]Personal|PIPELINE|EMAIL-OUTREACH|rebeltech|whatsapp/i, accent:0x3f8fdf},
-  {key:'credit', name:'Credit Desk',       wall:0xc7d3b0, roof:0x4e6b36, pos:[ 24,0,-16],
-   match:/iris|theo|nina-payplan|cole|auditor|disputer|payplan|bizcredit/i, folders:/Credit/i,
-   hint:/Agents[\\/]Credit|CREDIT-FILE|bureau|dispute/i, accent:0x5ad06a},
-  {key:'bet',    name:'Bet Analyst Desk',  wall:0xdcb88f, roof:0x9a5a22, pos:[-24,0, 16],
-   match:/ace-odds|remy|poly-whale|whale|odds|public/i, folders:/Polymarket|Bet/i,
-   hint:/Polymarket|BETBOARD|betfloor|whale_consensus|BET-FLOOR/i, accent:0xffa03a},
-  {key:'disney', name:'Disney Social',     wall:0xd8b3c2, roof:0x7a3458, pos:[ 24,0, 16],
-   match:/disney/i, folders:/Disney/i, hint:/disney/i, accent:0xff6fb0},
+  {key:'office',    name:'Territorial Law Office', wall:0xd9c3a0, roof:0x7a3b1f, pos:[-24,0,-16],
+   match:/counsel|paralegal|clerk|intake|drafter/i, folders:/techlawai/i,
+   hint:/techlawai|CLAUDE\.md|README/i, accent:0x3f8fdf},
+  {key:'claim',     name:'Claim Office',           wall:0xc9b184, roof:0x8a5a22, pos:[ 24,0,-16],
+   match:/scout|prospect|lead|hunter/i, folders:/lead[-_ ]?extraction/i,
+   hint:/lead_extraction|eCaseView|extract\.py|BUILD_SPEC/i, accent:0xffa03a},
+  {key:'marshal',   name:"Marshal's Office",       wall:0xc7cbb0, roof:0x4e5b36, pos:[-24,0, 16],
+   match:/marshal|removal|takedown|statute/i, folders:/mugshot[-_ ]?removal/i,
+   hint:/mugshot_removal|statutes\.py|draft\.py|tracker\.py|consent\.py/i, accent:0x5ad06a},
+  {key:'telegraph', name:'Telegraph Office',       wall:0xd8c0a8, roof:0x6a4a7a, pos:[ 24,0, 16],
+   match:/wire|telegraph|dispatch|sender|mailer/i, folders:/agent[-_ ]?town/i,
+   hint:/agent-town|serve\.py|send\.py|smtp|index\.html/i, accent:0xff6fb0},
 ];
 // who is who: agent slug → display name + position. Unnamed sessions get a townsperson name from the pool (sticky per browser).
-const ROLES=[[/hunter/i,'Hunter','Lead Scout'],[/vale/i,'Vale','Closer · WhatsApp'],[/gia/i,'Gia','Email Lane'],[/dante/i,'Dante','Site Builder'],[/lucy/i,'Lucy','Invoicing · Joist'],[/rocky/i,'Rocky','Reply Watch'],
-  [/iris/i,'Iris','Credit Auditor'],[/theo/i,'Theo','Disputes & Letters'],[/nina/i,'Nina','Paydown Planner'],[/cole/i,'Cole','Business Credit'],
-  [/ace/i,'Ace','Odds Analyst'],[/remy/i,'Remy','Public Money'],[/whale/i,'Wally','Whale Tracker'],[/disney/i,'Dee','Social Content']];
-const NAMES=['Mateo','Sofia','Luca','Emma','Diego','Mia','Leo','Zoe','Nico','Ava','Max','Isla','Owen','Lena','Rafa','Cleo'];
+//
+// These match on ROLE WORDS, not on your actual slugs -- those live in
+// ~/.claude/agents/<slug>.md on your machine and were not visible from here.
+// Add your real ones at the top of this list, e.g.
+//   [/^maya-researcher/i,'Annie','Statute Research'],
+// The first matching row wins, so specific slugs go above the generic words.
+const ROLES=[[/hunter|scout|prospect|lead/i,'Wyatt','Lead Scout'],[/marshal|removal|takedown/i,'Doc','Removal Marshal'],
+  [/statute|research|verify/i,'Annie','Statute Research'],[/draft|letter|writer/i,'Belle','Letter Drafter'],
+  [/send|mail|wire|telegraph/i,'Jesse','Wire Dispatch'],[/track|ledger|sheet/i,'Etta','Ledger Keeper'],
+  [/review|audit|check/i,'Cole','Circuit Auditor'],[/test|qa/i,'Pearl','Proving Grounds'],
+  [/build|site|web/i,'Gus','Town Carpenter'],[/intake|client|consent/i,'Willa','Client Intake']];
+const NAMES=['Wyatt','Annie','Doc','Belle','Jesse','Etta','Cole','Pearl','Gus','Willa','Hank','Sadie','Levi','Nell','Boone','Ruby'];
 const PLAZA=[0,0,0], HOMES_Z=36;
 const hexTo=h=>'#'+h.toString(16).padStart(6,'0');
 
