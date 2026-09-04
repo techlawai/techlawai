@@ -41,6 +41,8 @@
 // The desks, in western dress. Left column is what it is on the org chart:
 //   Mother Lode ............ Mother — Chaz, the main brain. Also the catch-all.
 //   Assay Office ........... Auditing — assayers verify what everyone else claims
+//   The Apothecary ......... Slim In — surgical/cosmetic compliance, HIPAA, FL med law
+//   Cattlemen's Exchange ... Ranch — meat prices, cattle, livestock, USDA, slaughterhouse
 //   Territorial Law Office . Legal strategies
 //   Marshal's Office ....... Underwriting — takedowns
 //   Claim Office ........... Marketing — leads and sourcing
@@ -62,6 +64,16 @@ const AGENCIES = [
   {key:'assay',     name:'⚖ Assay Office',         wall:0xcbbfa0, roof:0x6a5a3a, pos:[-30,0,-38],
    match:/assay|audit|verif|qa|tester/i, folders:/audit/i,
    hint:/test_|conftest|pytest|audit|verify/i, accent:0x5ad06a},
+  // Above Law on purpose: medical-legal work says "legal" too, and whoever is
+  // listed first wins. Compliance for the surgical side belongs here, not there.
+  {key:'apothecary',name:'⚕ Apothecary · Slim In', wall:0xd6d9c8, roof:0x3a6a5a, pos:[-58,0,-34],
+   match:/apothecar|hipaa|complian|surgic|cosmetic|slim|medical/i, folders:/slim|medical|clinic/i,
+   hint:/hipaa|phi\b|complian|surgic|cosmetic|slim[-_ ]?in|patient|medical/i, accent:0x7fd6c8},
+  // Above Law for the same reason: USDA and livestock work is its own body of
+  // rules, and a file about it should not get filed under general legal.
+  {key:'ranch',     name:"🐄 Cattlemen's Exchange", wall:0xc9a882, roof:0x6a3a22, pos:[ 58,0,-34],
+   match:/ranch|cattle|livestock|meat|usda|stock[-_ ]?hand/i, folders:/ranch|cattle|meat|livestock/i,
+   hint:/cattle|livestock|\bmeat\b|usda|slaughter|\bbeef\b|ranch|herd|carcass|boxed[-_ ]?beef/i, accent:0xc98a3a},
   {key:'law',       name:'§ Territorial Law Office',wall:0xd9c3a0, roof:0x7a3b1f, pos:[-24,0,-16],
    match:/counsel|paralegal|clerk|strateg|law/i, folders:/legal|strateg/i,
    hint:/statutes\.py|DELEGATION_GUIDE|legal|strateg/i, accent:0x3f8fdf},
@@ -100,6 +112,8 @@ const ROLES=[[/chaz|mother|brain|orchestrat/i,'Chaz','Main Brain · Mother Lode'
   [/draft|letter|writer/i,'Belle','Letter Drafter'],
   [/mugshot|tintype|photo|image/i,'Jesse','Tintype Clerk'],
   [/track|ledger|sheet|tracker/i,'Etta','Ledger Keeper'],
+  [/hipaa|complian|surgic|cosmetic|slim|apothecar/i,'Nell','Compliance Apothecary'],
+  [/cattle|livestock|meat|usda|ranch|beef|slaughter/i,'Boone','Stock Handler'],
   [/audit|assay|verif/i,'Cole','Assayer'],
   [/review|reput|gazette|press/i,'Pearl','Gazette Editor'],
   [/test|qa/i,'Gus','Proving Grounds'],
