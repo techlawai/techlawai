@@ -41,7 +41,7 @@
 // The desks, in western dress. Left column is what it is on the org chart:
 //   Mother Lode ............ Mother — Chaz, the main brain. Also the catch-all.
 //   Assay Office ........... Auditing — assayers verify what everyone else claims
-//   The Apothecary ......... Slim In — surgical/cosmetic compliance, HIPAA, FL med law
+//   The Apothecary ......... Slim Inc — surgical/cosmetic compliance, HIPAA, FL med law
 //   Cattlemen's Exchange ... Ranch — meat prices, cattle, livestock, USDA, slaughterhouse
 //   Territorial Law Office . Legal strategies
 //   Marshal's Office ....... Underwriting — takedowns
@@ -66,9 +66,12 @@ const AGENCIES = [
    hint:/test_|conftest|pytest|audit|verify/i, accent:0x5ad06a},
   // Above Law on purpose: medical-legal work says "legal" too, and whoever is
   // listed first wins. Compliance for the surgical side belongs here, not there.
-  {key:'apothecary',name:'⚕ Apothecary · Slim In', wall:0xd6d9c8, roof:0x3a6a5a, pos:[-58,0,-34],
+  {key:'apothecary',name:'⚕ Apothecary · Slim Inc',wall:0xd6d9c8, roof:0x3a6a5a, pos:[-58,0,-34],
    match:/apothecar|hipaa|complian|surgic|cosmetic|slim|medical/i, folders:/slim|medical|clinic/i,
-   hint:/hipaa|phi\b|complian|surgic|cosmetic|slim[-_ ]?in|patient|medical/i, accent:0x7fd6c8},
+   // \bslim(?=…) takes Slim, Slim In, Slim Inc, SlimIn, SlimInc and slim_*,
+   // but not slimmer/slimming/slimline. Plain \b will not do it: _ is a word
+   // character, so \bslim\b misses slim_pricing.md.
+   hint:/hipaa|phi\b|complian|surgic|cosmetic|\bslim(?=[\s_\-\/.]|inc?\b|$)|patient|medical/i, accent:0x7fd6c8},
   // Above Law for the same reason: USDA and livestock work is its own body of
   // rules, and a file about it should not get filed under general legal.
   {key:'ranch',     name:"🐄 Cattlemen's Exchange", wall:0xc9a882, roof:0x6a3a22, pos:[ 58,0,-34],
