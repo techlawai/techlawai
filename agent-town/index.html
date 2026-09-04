@@ -38,20 +38,54 @@
 // The FIRST entry is the catch-all: a session with no slug match working from
 // a default folder walks here. Unmatched sessions from other folders wait in
 // the town square, so keep the main office first.
+// The desks, in western dress. Left column is what it is on the org chart:
+//   Mother Lode ............ Mother — Chaz, the main brain. Also the catch-all.
+//   Assay Office ........... Auditing — assayers verify what everyone else claims
+//   Territorial Law Office . Legal strategies
+//   Marshal's Office ....... Underwriting — takedowns
+//   Claim Office ........... Marketing — leads and sourcing
+//   Tintype Office ......... Mugshots — a mugshot was a tintype once
+//   The Gazette ............ Reviews
+//
+// ORDER MATTERS. agencyFor() walks this list in order and takes the first hit,
+// so narrower desks sit above broader ones: Assay takes test files before
+// Marshal can claim them by filename, and Marshal takes the takedown scripts
+// before Tintype claims everything under mugshot_removal.
+//
+// The FIRST entry is the catch-all -- a session in the home folder with no
+// other match walks there. That is deliberate for Mother Lode; if you reorder,
+// keep the brain first.
 const AGENCIES = [
-  {key:'office',    name:'Territorial Law Office', wall:0xd9c3a0, roof:0x7a3b1f, pos:[-24,0,-16],
-   match:/counsel|paralegal|clerk|intake|drafter/i, folders:/techlawai/i,
-   hint:/techlawai|CLAUDE\.md|README/i, accent:0x3f8fdf},
-  {key:'claim',     name:'Claim Office',           wall:0xc9b184, roof:0x8a5a22, pos:[ 24,0,-16],
-   match:/scout|prospect|lead|hunter/i, folders:/lead[-_ ]?extraction/i,
-   hint:/lead_extraction|eCaseView|extract\.py|BUILD_SPEC/i, accent:0xffa03a},
-  {key:'marshal',   name:"Marshal's Office",       wall:0xc7cbb0, roof:0x4e5b36, pos:[-24,0, 16],
-   match:/marshal|removal|takedown|statute/i, folders:/mugshot[-_ ]?removal/i,
-   hint:/mugshot_removal|statutes\.py|draft\.py|tracker\.py|consent\.py/i, accent:0x5ad06a},
-  {key:'telegraph', name:'Telegraph Office',       wall:0xd8c0a8, roof:0x6a4a7a, pos:[ 24,0, 16],
-   match:/wire|telegraph|dispatch|sender|mailer/i, folders:/agent[-_ ]?town/i,
-   hint:/agent-town|serve\.py|send\.py|smtp|index\.html/i, accent:0xff6fb0},
+  {key:'mother',    name:'⛏ Mother Lode',          wall:0xe0cba0, roof:0x6a4a1f, pos:[  0,0,-22],
+   match:/chaz|mother|brain|orchestrat|conductor/i, folders:/techlawai/i,
+   hint:/CLAUDE\.md|README\.md$|orchestrat/i, accent:0xffd24a},
+  {key:'assay',     name:'⚖ Assay Office',         wall:0xcbbfa0, roof:0x6a5a3a, pos:[-30,0,-38],
+   match:/assay|audit|verif|qa|tester/i, folders:/audit/i,
+   hint:/test_|conftest|pytest|audit|verify/i, accent:0x5ad06a},
+  {key:'law',       name:'§ Territorial Law Office',wall:0xd9c3a0, roof:0x7a3b1f, pos:[-24,0,-16],
+   match:/counsel|paralegal|clerk|strateg|law/i, folders:/legal|strateg/i,
+   hint:/statutes\.py|DELEGATION_GUIDE|legal|strateg/i, accent:0x3f8fdf},
+  {key:'marshal',   name:"★ Marshal's Office",     wall:0xc9b184, roof:0x8a3a22, pos:[ 24,0,-16],
+   match:/marshal|underwrit|takedown|removal|enforc/i, folders:/underwrit|takedown/i,
+   hint:/draft\.py|send\.py|consent\.py|tracker\.py|takedown/i, accent:0xd94f4f},
+  {key:'claim',     name:'⛰ Claim Office',         wall:0xdcb88f, roof:0x9a5a22, pos:[-24,0, 16],
+   match:/scout|prospect|lead|market|sourc/i, folders:/lead[-_ ]?extraction|market/i,
+   hint:/lead_extraction|eCaseView|extract\.py|BUILD_SPEC|lead/i, accent:0xffa03a},
+  {key:'tintype',   name:'◉ Tintype Office',       wall:0xd8c0a8, roof:0x5a4a6a, pos:[ 24,0, 16],
+   match:/tintype|mugshot|photo|image/i, folders:/mugshot/i,
+   hint:/mugshot|search\.py|owner_lookup\.py/i, accent:0xb08fd9},
+  {key:'gazette',   name:'📰 The Gazette',          wall:0xc7cbb0, roof:0x4e5b36, pos:[ 30,0,-38],
+   match:/gazette|review|reput|press/i, folders:/review|reput/i,
+   hint:/review|reputation|gazette|testimonial/i, accent:0x9fd0ff},
 ];
+// Sessions whose project folder matches this belong to the firm rather than
+// being visitors passing through. Claude encodes a path by replacing \ and :
+// with -, so C:\Vault arrives as C--Vault -- set this to your own checkout.
+const HOME_FOLDER=/^C--Vault$|techlawai/i;
+// What to assume when the office feed reports a session with no folder at all.
+// It only has to be something HOME_FOLDER matches, so those sessions read as
+// staff rather than as visitors from nowhere.
+const DEFAULT_FOLDER='techlawai';
 // who is who: agent slug → display name + position. Unnamed sessions get a townsperson name from the pool (sticky per browser).
 //
 // These match on ROLE WORDS, not on your actual slugs -- those live in
@@ -59,11 +93,18 @@ const AGENCIES = [
 // Add your real ones at the top of this list, e.g.
 //   [/^maya-researcher/i,'Annie','Statute Research'],
 // The first matching row wins, so specific slugs go above the generic words.
-const ROLES=[[/hunter|scout|prospect|lead/i,'Wyatt','Lead Scout'],[/marshal|removal|takedown/i,'Doc','Removal Marshal'],
-  [/statute|research|verify/i,'Annie','Statute Research'],[/draft|letter|writer/i,'Belle','Letter Drafter'],
-  [/send|mail|wire|telegraph/i,'Jesse','Wire Dispatch'],[/track|ledger|sheet/i,'Etta','Ledger Keeper'],
-  [/review|audit|check/i,'Cole','Circuit Auditor'],[/test|qa/i,'Pearl','Proving Grounds'],
-  [/build|site|web/i,'Gus','Town Carpenter'],[/intake|client|consent/i,'Willa','Client Intake']];
+const ROLES=[[/chaz|mother|brain|orchestrat/i,'Chaz','Main Brain · Mother Lode'],
+  [/hunter|scout|prospect|lead|market|sourc/i,'Wyatt','Lead Scout'],
+  [/marshal|underwrit|takedown|removal/i,'Doc','Takedown Marshal'],
+  [/statute|legal|strateg|counsel/i,'Annie','Legal Strategy'],
+  [/draft|letter|writer/i,'Belle','Letter Drafter'],
+  [/mugshot|tintype|photo|image/i,'Jesse','Tintype Clerk'],
+  [/track|ledger|sheet|tracker/i,'Etta','Ledger Keeper'],
+  [/audit|assay|verif/i,'Cole','Assayer'],
+  [/review|reput|gazette|press/i,'Pearl','Gazette Editor'],
+  [/test|qa/i,'Gus','Proving Grounds'],
+  [/intake|client|consent/i,'Willa','Client Intake'],
+  [/send|mail|wire|smtp/i,'Hank','Wire Dispatch']];
 const NAMES=['Wyatt','Annie','Doc','Belle','Jesse','Etta','Cole','Pearl','Gus','Willa','Hank','Sadie','Levi','Nell','Boone','Ruby'];
 const PLAZA=[0,0,0], HOMES_Z=36;
 const hexTo=h=>'#'+h.toString(16).padStart(6,'0');
@@ -273,15 +314,15 @@ function makeChar(preset,skin,accent=0x9e9e9e){const g=new THREE.Group(); const 
 let nameBook={}; try{nameBook=JSON.parse(localStorage.getItem('town-names')||'{}');}catch(e){}
 function townName(id){if(!nameBook[id]){const used=new Set(Object.values(nameBook)); nameBook[id]=NAMES.find(n=>!used.has(n))||NAMES[Number(id)%NAMES.length]; try{localStorage.setItem('town-names',JSON.stringify(nameBook));}catch(e){}} return nameBook[id];}
 function identity(a){ if(a.name){ for(const [re,n,r] of ROLES) if(re.test(a.name)) return {name:n,role:r}; const p=a.name.split(/[-_ ]/); return {name:p[0][0].toUpperCase()+p[0].slice(1),role:p.slice(1).join(' ')||'Agent'}; }
-  const b=a.agency?buildings[a.agency]:null; return {name:townName(a.id),role:b?(a.folder&&a.folder!=='C--Vault'?a.folder:'Coordinator'):`Visitor · ${a.folder||'?'}`}; }
+  const b=a.agency?buildings[a.agency]:null; return {name:townName(a.id),role:b?(a.folder&&!HOME_FOLDER.test(a.folder)?a.folder:'Coordinator'):`Visitor · ${a.folder||'?'}`}; }
 const ACTIVITY=[['home',34],['coffee',20],['park',14],['spring',12],['rec',12],['library',8]];
 const ACT_LABEL={home:'resting at home',coffee:'at the café',park:'by the campfire',spring:'in the hot spring',rec:'in the rec room',library:'in the reading nook'};
 const agents=new Map(); let homeIdx=0;
 function agencyFor(name,folder,hint){
   for(const a of AGENCIES){if(name&&a.match.test(name))return a.key;}
   for(const a of AGENCIES){if(hint&&a.hint.test(hint))return a.key;}
-  for(const a of AGENCIES){if(folder&&a.key!=='agency'&&a.folders.test(folder))return a.key;}
-  if(!folder||folder==='C--Vault') return 'agency';
+  for(const a of AGENCIES){if(folder&&a.key!==AGENCIES[0].key&&a.folders.test(folder))return a.key;}
+  if(!folder||HOME_FOLDER.test(folder)) return AGENCIES[0].key;
   return null;}
 function freeSeat(seats,id,key){const taken=new Set([...agents.values()].filter(a=>a.id!==id&&a.spot&&a.spot.key===key).map(a=>a.spot.i)); for(let i=0;i<seats.length;i++) if(!taken.has(i)) return i; return null;}
 function recolor(a){const ag=a.agency?buildings[a.agency]:null; a.mesh.userData.scarf.material.color.set(ag?ag.accent:0x9e9e9e);}
@@ -317,8 +358,8 @@ async function connect(){
 }
 function handle(m){
   switch(m.type){
-    case 'existingAgents': (m.agents||[]).forEach(id=>{const meta=(m.agentMeta&&m.agentMeta[id])||{}; upsert(id,{name:meta.teammateName||meta.agentName||meta.terminalName||null,folder:(m.folderNames&&m.folderNames[id])||meta.folderName||'C--Vault',status:'waiting'});}); break;
-    case 'agentCreated': upsert(m.id,{name:m.teammateName||m.agentName||null,folder:m.folderName||'C--Vault',status:'active'}); break;
+    case 'existingAgents': (m.agents||[]).forEach(id=>{const meta=(m.agentMeta&&m.agentMeta[id])||{}; upsert(id,{name:meta.teammateName||meta.agentName||meta.terminalName||null,folder:(m.folderNames&&m.folderNames[id])||meta.folderName||DEFAULT_FOLDER,status:'waiting'});}); break;
+    case 'agentCreated': upsert(m.id,{name:m.teammateName||m.agentName||null,folder:m.folderName||DEFAULT_FOLDER,status:'active'}); break;
     case 'agentTeamInfo': upsert(m.id,{name:m.agentName||undefined}); break;
     case 'agentStatus': upsert(m.id,{status:m.status}); break;
     case 'agentToolStart': { const st=(m.status||'').replace(/^(Using|Running:)\s*/,'').replace(/^mcp__.*?__(?=[a-z])/,'').slice(0,34); upsert(m.id,{tool:m.toolName||'working',statusText:st,hint:m.status||m.toolName||'',status:'active'}); break; }
