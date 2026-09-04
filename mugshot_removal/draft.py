@@ -26,6 +26,7 @@ depicted. This letter constitutes that written request.
 
 Booking date: {booking_date}
 Arresting agency: {arresting_agency}
+Case disposition: {disposition}
 
 Please confirm removal in writing. If the photograph is not removed within
 {deadline_days} calendar days of the date of this request, I am entitled
@@ -56,11 +57,48 @@ publishing it. This letter constitutes my written request for removal.
 
 Booking date: {booking_date}
 Arresting agency: {arresting_agency}
+Case disposition: {disposition}
 
 Please confirm removal in writing. [NOTE TO OPERATOR: this state's specific
 removal deadline and noncompliance penalty were not confirmed for this tool
 -- verify current statutory text for {state_name} before sending, and add
 the specific deadline/penalty language before relying on this letter.]
+
+Sincerely,
+{client_name}
+{client_contact}
+
+Date of this request: {request_date}
+"""
+
+"""Used for "unverified" states: no statute is cited and no legal entitlement
+is claimed, because none has been confirmed for that state. It is a plain
+first-person request. Deliberately NOT a DMCA notice -- see statutes.py."""
+TEMPLATE_NO_STATUTE = """\
+Subject: Request for Removal of Booking Photograph
+
+To Whom It May Concern:
+
+My name is {client_name}. I am the person depicted in the arrest booking
+photograph that currently appears on your website at the following URL:
+
+{target_url}
+
+I am writing to ask you to remove that photograph and to stop publishing it.
+
+Booking date: {booking_date}
+Arresting agency: {arresting_agency}
+Case disposition: {disposition}
+
+Please confirm removal in writing.
+
+[NOTE TO OPERATOR: this letter cites no statute and claims no legal
+entitlement, because no statutory basis for {state_name} has been confirmed
+for this tool -- see that state's entry in statutes.py, which records where
+to look. Verify {state_name}'s current law before adding any statutory
+demand. Do NOT add a copyright or DMCA claim: the booking photograph is the
+arresting agency's work, the client does not hold its copyright, and a DMCA
+notice is sworn under penalty of perjury.]
 
 Sincerely,
 {client_name}
@@ -88,6 +126,7 @@ def generate_letter(
     booking_date: str = "",
     arresting_agency: str = "",
     request_date: date | None = None,
+    disposition: str = "",
 ) -> str:
     statute = get_statute(state)
     request_date = request_date or date.today()
@@ -99,9 +138,15 @@ def generate_letter(
         target_url=target_url,
         booking_date=booking_date or "N/A",
         arresting_agency=arresting_agency or "N/A",
+        # Stated plainly rather than argued: several states condition the
+        # removal right on how the case ended, and the recipient can check it.
+        disposition=disposition or "Not stated",
         request_date=request_date.isoformat(),
         state_name=statute["name"],
     )
+
+    if statute["confidence"] == "unverified":
+        return TEMPLATE_NO_STATUTE.format(**common)
 
     if statute["removal_deadline_days"] is not None:
         deadline = request_date + timedelta(days=statute["removal_deadline_days"])

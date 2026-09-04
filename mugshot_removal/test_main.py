@@ -93,6 +93,117 @@ class TestSendConsentGate:
         assert logged["log"] == []
 
 
+class TestSendDispositionGate:
+    """GA's removal right is recorded as reaching only certain outcomes.
+    Asserting it for a client it does not reach would claim a right they do
+    not have, so `send` refuses rather than guessing."""
+
+    GA_ARGS = [*SEND_ARGS, "--state", "GA", "--consent-date", "2026-08-25"]
+
+    @pytest.mark.parametrize("disposition", ["convicted", "pending", "unknown"])
+    def test_refuses_a_non_qualifying_disposition(self, run_main, sent, disposition):
+        with pytest.raises(SystemExit) as exit_info:
+            run_main([*self.GA_ARGS, "--disposition", disposition])
+
+        assert "Refusing to send" in str(exit_info.value)
+        assert sent == []
+
+    def test_refuses_when_no_disposition_is_given(self, run_main, sent):
+        with pytest.raises(SystemExit) as exit_info:
+            run_main(self.GA_ARGS)
+
+        assert "Refusing to send" in str(exit_info.value)
+        assert sent == []
+
+    def test_refusal_names_the_qualifying_outcomes(self, run_main, sent):
+        with pytest.raises(SystemExit) as exit_info:
+            run_main([*self.GA_ARGS, "--disposition", "convicted"])
+
+        message = str(exit_info.value)
+        assert "Georgia" in message
+        assert "dismissed" in message
+        assert "acquitted" in message
+
+    @pytest.mark.parametrize("disposition", ["dismissed", "acquitted", "expunged"])
+    def test_sends_for_a_qualifying_disposition(self, run_main, sent, disposition):
+        run_main([*self.GA_ARGS, "--disposition", disposition])
+
+        assert len(sent) == 1
+        assert f"Case disposition: {disposition}" in sent[0]["letter_body"]
+
+    def test_unconditional_state_sends_without_a_disposition(self, run_main, sent):
+        run_main([*SEND_ARGS, "--consent-date", "2026-08-25"])
+
+        assert len(sent) == 1
+        assert "Case disposition: Not stated" in sent[0]["letter_body"]
+
+    def test_unconditional_state_accepts_any_disposition(self, run_main, sent):
+        run_main([*SEND_ARGS, "--consent-date", "2026-08-25", "--disposition", "convicted"])
+
+        assert len(sent) == 1
+
+    @pytest.mark.parametrize("garbage", ["nolle", "dropped", "not guilty"])
+    def test_unknown_disposition_is_refused(self, run_main, sent, garbage):
+        with pytest.raises(SystemExit) as exit_info:
+            run_main([*SEND_ARGS, "--consent-date", "2026-08-25", "--disposition", garbage])
+
+        assert "Unknown disposition" in str(exit_info.value)
+        assert sent == []
+
+    def test_consent_gate_still_runs_first(self, run_main, sent):
+        # A bad consent date must stop the send regardless of disposition.
+        with pytest.raises(SystemExit) as exit_info:
+            run_main([*SEND_ARGS, "--state", "GA", "--consent-date", TOMORROW,
+                      "--disposition", "dismissed"])
+
+        assert "consent" in str(exit_info.value).lower()
+        assert sent == []
+
+    def test_disposition_is_logged_to_the_tracker(self, run_main, sent, logged):
+        run_main([*self.GA_ARGS, "--disposition", "dismissed", "--sheet-id", "S"])
+
+        assert logged["log"][0]["kwargs"]["disposition"] == "dismissed"
+
+    def test_nothing_is_logged_when_the_gate_refuses(self, run_main, sent, logged):
+        with pytest.raises(SystemExit):
+            run_main([*self.GA_ARGS, "--disposition", "convicted", "--sheet-id", "S"])
+
+        assert logged["open"] == []
+        assert logged["log"] == []
+
+
+class TestDraftDisposition:
+    DRAFT_ARGS = [
+        "draft",
+        "--client-name", "Jane Public",
+        "--client-contact", "jane@example.com",
+        "--target-url", "https://example-site.test/jane",
+    ]
+
+    def test_states_the_disposition_when_given(self, run_main, capsys):
+        run_main([*self.DRAFT_ARGS, "--disposition", "dismissed"])
+
+        assert "Case disposition: dismissed" in capsys.readouterr().out
+
+    def test_says_not_stated_when_omitted(self, run_main, capsys):
+        run_main(self.DRAFT_ARGS)
+
+        assert "Case disposition: Not stated" in capsys.readouterr().out
+
+    def test_rejects_an_unknown_disposition(self, run_main):
+        with pytest.raises(SystemExit) as exit_info:
+            run_main([*self.DRAFT_ARGS, "--disposition", "nolle"])
+
+        assert "Unknown disposition" in str(exit_info.value)
+
+    def test_draft_is_not_gated_on_qualifying(self, run_main, capsys):
+        # draft is a preview; only `send` refuses. An operator must be able to
+        # see what a non-qualifying client's letter would say.
+        run_main([*self.DRAFT_ARGS, "--state", "GA", "--disposition", "convicted"])
+
+        assert "Case disposition: convicted" in capsys.readouterr().out
+
+
 class TestSend:
     def test_sends_with_a_valid_consent_date(self, run_main, sent, capsys):
         run_main([*SEND_ARGS, "--consent-date", "2026-08-25"])
@@ -225,7 +336,23 @@ class TestListStates:
         run_main(["list-states"])
 
         printed = json.loads(capsys.readouterr().out)
-        assert printed == main.STATE_STATUTES
+        # Compared against the table's own JSON round-trip: tuples such as
+        # qualifying_dispositions come back as lists, JSON having no tuple.
+        assert printed == json.loads(json.dumps(main.STATE_STATUTES))
+
+    def test_the_whole_table_is_serialisable(self, run_main, capsys):
+        # A non-serialisable value in any entry breaks this command outright.
+        run_main(["list-states"])
+
+        printed = json.loads(capsys.readouterr().out)
+        assert set(printed) == set(main.STATE_STATUTES)
+        assert printed["GA"]["qualifying_dispositions"] == [
+            "not-charged",
+            "dismissed",
+            "acquitted",
+            "sealed",
+            "expunged",
+        ]
 
 
 class TestSearch:

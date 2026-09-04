@@ -7,23 +7,36 @@ from google.oauth2.service_account import Credentials
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
-HEADER = [
+REQUEST_FIELDS = [
     "Client Name",
     "State",
     "Target URL",
     "Contact Email",
     "Consent Date",
+    "Disposition",
     "Request Sent Date",
     "Deadline",
     "Status",
     "Notes",
-    "Registrant Org",
-    "Registrant Name",
-    "Registrant Email",
-    "Registrar",
-    "Hosting Org",
-    "Hosting Abuse Email",
 ]
+
+# Columns filled in by check-overdue's registrant/hosting lookup, in the order
+# record_owner_info() writes them. Each pairs a section of full_lookup()'s
+# result with the key to read from it, so the sheet layout and the write stay
+# in step -- they drifted apart once already.
+LOOKUP_FIELDS = [
+    ("Registrant Org", "domain_info", "registrant_org"),
+    ("Registrant Name", "domain_info", "registrant_name"),
+    ("Registrant Email", "domain_info", "registrant_email"),
+    ("Registrar", "domain_info", "registrar"),
+    ("Registrant Country", "domain_info", "country"),
+    ("Hosting Org", "hosting_info", "hosting_org"),
+    ("Hosting Abuse Email", "hosting_info", "abuse_email"),
+    ("Hosting Country", "hosting_info", "hosting_country"),
+    ("Hosting Address", "hosting_info", "hosting_address"),
+]
+
+HEADER = REQUEST_FIELDS + [label for label, _, _ in LOOKUP_FIELDS]
 
 
 def open_tracker(sheet_id: str, creds_path: str, worksheet_name: str = "Removal Requests"):
@@ -41,7 +54,7 @@ def open_tracker(sheet_id: str, creds_path: str, worksheet_name: str = "Removal 
 
 def log_request(ws, client_name: str, state: str, target_url: str, contact_email: str,
                  consent_date: date, deadline_days: int | None, sent_date: date | None = None,
-                 status: str = "Pending", notes: str = ""):
+                 status: str = "Pending", notes: str = "", disposition: str = ""):
     """consent_date is required: a request must not be logged (or sent --
     see main.py) without a recorded date the client authorized it."""
     sent_date = sent_date or date.today()
@@ -52,11 +65,12 @@ def log_request(ws, client_name: str, state: str, target_url: str, contact_email
         target_url,
         contact_email,
         consent_date.isoformat(),
+        disposition,
         sent_date.isoformat(),
         deadline,
         status,
         notes,
-        "", "", "", "", "", "",
+        *[""] * len(LOOKUP_FIELDS),
     ], value_input_option="USER_ENTERED")
 
 
@@ -79,12 +93,19 @@ def list_overdue(ws) -> list[dict]:
     return overdue
 
 
+def _column_letter(index: int) -> str:
+    """0-based column index to its A1 letter (A, B, ... Z, AA, ...)."""
+    letters = ""
+    index += 1
+    while index:
+        index, remainder = divmod(index - 1, 26)
+        letters = chr(ord("A") + remainder) + letters
+    return letters
+
+
 def record_owner_info(ws, target_url: str, lookup_result: dict):
     """Write registrant/hosting lookup results into the row matching
     target_url (the most recent matching row if there are several)."""
-    domain_info = lookup_result.get("domain_info", {})
-    hosting_info = lookup_result.get("hosting_info", {})
-
     cell = None
     matches = ws.findall(target_url)
     if matches:
@@ -92,13 +113,13 @@ def record_owner_info(ws, target_url: str, lookup_result: dict):
     if cell is None:
         return False
 
+    values = [
+        (lookup_result.get(section) or {}).get(key) or ""
+        for _, section, key in LOOKUP_FIELDS
+    ]
+
     row = cell.row
-    ws.update(range_name=f"J{row}:O{row}", values=[[
-        domain_info.get("registrant_org") or "",
-        domain_info.get("registrant_name") or "",
-        domain_info.get("registrant_email") or "",
-        domain_info.get("registrar") or "",
-        hosting_info.get("hosting_org") or "",
-        hosting_info.get("abuse_email") or "",
-    ]])
+    first = _column_letter(len(REQUEST_FIELDS))
+    last = _column_letter(len(HEADER) - 1)
+    ws.update(range_name=f"{first}{row}:{last}{row}", values=[values])
     return True
