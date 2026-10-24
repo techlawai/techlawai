@@ -38,6 +38,10 @@ LOOKUP_FIELDS = [
 
 HEADER = REQUEST_FIELDS + [label for label, _, _ in LOOKUP_FIELDS]
 
+# Where a request can stand. "Pending" is the only one list_overdue() acts on,
+# so anything that closes or hands off a request must move it off "Pending".
+STATUSES = ("Pending", "Removed", "Refused", "Escalated", "Withdrawn")
+
 
 def open_tracker(sheet_id: str, creds_path: str, worksheet_name: str = "Removal Requests"):
     creds = Credentials.from_service_account_file(creds_path, scopes=SCOPES)
@@ -91,6 +95,73 @@ def list_overdue(ws) -> list[dict]:
         if deadline < today:
             overdue.append(row)
     return overdue
+
+
+def _same_client(row: dict, client_name: str) -> bool:
+    return str(row.get("Client Name", "")).strip().lower() == client_name.strip().lower()
+
+
+def validate_status(status: str) -> str:
+    """Match a status case-insensitively to one in STATUSES. Raises
+    ValueError otherwise -- a typo must not silently take a request off the
+    overdue check."""
+    for known in STATUSES:
+        if (status or "").strip().lower() == known.lower():
+            return known
+    raise ValueError(f"Unknown status '{status}'. Use one of: {', '.join(STATUSES)}.")
+
+
+def update_status(ws, client_name: str, target_url: str, status: str,
+                  note: str = "", on: date | None = None) -> bool:
+    """Set the Status of this client's request for target_url (the most recent
+    matching row if there are several), appending a dated note to Notes so
+    the row keeps its history. Returns False if no row matches."""
+    status = validate_status(status)
+    on = on or date.today()
+    rows = ws.get_all_records()
+    match = None
+    for index, row in enumerate(rows):
+        if _same_client(row, client_name) and row.get("Target URL") == target_url:
+            match = (index, row)
+    if match is None:
+        return False
+
+    index, row = match
+    entry = f"{on.isoformat()}: {status}" + (f" -- {note}" if note else "")
+    notes = str(row.get("Notes") or "")
+    notes = f"{notes}; {entry}" if notes else entry
+
+    # Row 1 is the header, so record i sits on sheet row i + 2. Status and
+    # Notes are adjacent, so one range write covers both.
+    sheet_row = index + 2
+    first = _column_letter(REQUEST_FIELDS.index("Status"))
+    last = _column_letter(REQUEST_FIELDS.index("Notes"))
+    ws.update(range_name=f"{first}{sheet_row}:{last}{sheet_row}", values=[[status, notes]])
+    return True
+
+
+def client_report(ws, client_name: str, today: date | None = None) -> list[dict]:
+    """Every request logged for one client, each with how it stands against
+    its deadline: days_remaining (negative once overdue) and overdue. Both
+    are None where the deadline isn't a real date or the request is closed."""
+    today = today or date.today()
+    report = []
+    for row in ws.get_all_records():
+        if not _same_client(row, client_name):
+            continue
+        entry = {field: row.get(field, "") for field in REQUEST_FIELDS}
+        entry["days_remaining"] = None
+        entry["overdue"] = None
+        if row.get("Status") == "Pending":
+            try:
+                deadline = date.fromisoformat(row["Deadline"])
+            except (ValueError, KeyError):
+                deadline = None
+            if deadline is not None:
+                entry["days_remaining"] = (deadline - today).days
+                entry["overdue"] = deadline < today
+        report.append(entry)
+    return report
 
 
 def _column_letter(index: int) -> str:

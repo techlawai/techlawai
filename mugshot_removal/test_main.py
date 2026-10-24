@@ -443,3 +443,71 @@ class TestArgumentParsing:
             run_main(["deliver"])
 
         assert exit_info.value.code == 2
+
+
+@pytest.fixture
+def opened_sheet(monkeypatch):
+    """Route open_tracker at a fake worksheet holding the given records."""
+    from mugshot_fakes import FakeWorksheet
+
+    def _install(records):
+        worksheet = FakeWorksheet(records=records)
+        monkeypatch.setattr(main, "open_tracker", lambda sheet_id, creds: worksheet)
+        return worksheet
+
+    return _install
+
+
+def _row(**overrides):
+    row = {
+        "Client Name": "Jane Public",
+        "Target URL": "https://example-site.test/jane",
+        "Deadline": "N/A (verify statute)",
+        "Status": "Pending",
+        "Notes": "",
+    }
+    row.update(overrides)
+    return row
+
+
+STATUS_ARGS = [
+    "update-status", "--sheet-id", "S",
+    "--client-name", "Jane Public",
+    "--target-url", "https://example-site.test/jane",
+]
+
+
+class TestUpdateStatus:
+    def test_updates_the_row(self, run_main, opened_sheet, capsys):
+        worksheet = opened_sheet([_row()])
+
+        run_main([*STATUS_ARGS, "--status", "removed", "--note", "gone"])
+
+        assert worksheet.updates[0][1][0][0] == "Removed"
+        assert "gone" in worksheet.updates[0][1][0][1]
+        assert "to Removed" in capsys.readouterr().out
+
+    def test_unknown_status_exits_without_opening_the_sheet(self, run_main, monkeypatch):
+        monkeypatch.setattr(
+            main, "open_tracker",
+            lambda *a: pytest.fail("sheet opened for an invalid status"),
+        )
+
+        with pytest.raises(SystemExit, match="Unknown status"):
+            run_main([*STATUS_ARGS, "--status", "done"])
+
+    def test_no_matching_row_is_an_error(self, run_main, opened_sheet):
+        opened_sheet([_row(**{"Client Name": "Someone Else"})])
+
+        with pytest.raises(SystemExit, match="No tracker row"):
+            run_main([*STATUS_ARGS, "--status", "Removed"])
+
+
+class TestClientReport:
+    def test_prints_that_clients_requests_as_json(self, run_main, opened_sheet, capsys):
+        opened_sheet([_row(), _row(**{"Client Name": "Someone Else"})])
+
+        run_main(["client-report", "--sheet-id", "S", "--client-name", "Jane Public"])
+
+        report = json.loads(capsys.readouterr().out)
+        assert [entry["Client Name"] for entry in report] == ["Jane Public"]
