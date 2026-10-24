@@ -17,7 +17,16 @@ from statutes import (
     get_statute,
     validate_disposition,
 )
-from tracker import list_overdue, log_request, open_tracker, record_owner_info
+from tracker import (
+    STATUSES,
+    client_report,
+    list_overdue,
+    log_request,
+    open_tracker,
+    record_owner_info,
+    update_status,
+    validate_status,
+)
 
 
 DISPOSITION_HELP = (
@@ -127,6 +136,26 @@ def cmd_check_overdue(args):
     print(json.dumps(overdue, indent=2))
 
 
+def cmd_update_status(args):
+    # Checked before the sheet is opened, so a typo costs nothing.
+    try:
+        validate_status(args.status)
+    except ValueError as e:
+        raise SystemExit(str(e))
+    ws = open_tracker(args.sheet_id, args.creds)
+    if not update_status(ws, args.client_name, args.target_url, args.status, args.note):
+        raise SystemExit(
+            f"No tracker row for {args.client_name} at {args.target_url}. "
+            f"Check the client name and URL exactly as they were sent."
+        )
+    print(f"Updated {args.client_name} / {args.target_url} to {validate_status(args.status)}.")
+
+
+def cmd_client_report(args):
+    ws = open_tracker(args.sheet_id, args.creds)
+    print(json.dumps(client_report(ws, args.client_name), indent=2))
+
+
 def cmd_lookup_owner(args):
     print(json.dumps(full_lookup(args.target_url), indent=2))
 
@@ -197,6 +226,27 @@ def main():
     p_overdue.add_argument("--sheet-id", required=True)
     p_overdue.add_argument("--creds", default="service_account.json")
     p_overdue.set_defaults(func=cmd_check_overdue)
+
+    p_status = sub.add_parser(
+        "update-status",
+        help="Record what happened to a sent request (removed, refused, escalated, ...)",
+    )
+    p_status.add_argument("--sheet-id", required=True)
+    p_status.add_argument("--creds", default="service_account.json")
+    p_status.add_argument("--client-name", required=True)
+    p_status.add_argument("--target-url", required=True)
+    p_status.add_argument("--status", required=True, help="One of: " + ", ".join(STATUSES))
+    p_status.add_argument("--note", default="", help="Optional: appended to the row's Notes with today's date")
+    p_status.set_defaults(func=cmd_update_status)
+
+    p_report = sub.add_parser(
+        "client-report",
+        help="List every request logged for one client, with status and days to deadline",
+    )
+    p_report.add_argument("--sheet-id", required=True)
+    p_report.add_argument("--creds", default="service_account.json")
+    p_report.add_argument("--client-name", required=True)
+    p_report.set_defaults(func=cmd_client_report)
 
     p_lookup = sub.add_parser("lookup-owner", help="Look up registrant and hosting info for a URL")
     p_lookup.add_argument("--target-url", required=True)

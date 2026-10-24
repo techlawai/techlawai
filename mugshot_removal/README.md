@@ -132,6 +132,24 @@ finding: registrant country comes from a WHOIS record that is frequently
 privacy-shielded, and the hosting country is where the *network* is
 registered, which is often a CDN or a datacenter rather than the operator.
 
+Record what happened once a site responds (or doesn't). Statuses are
+`Pending`, `Removed`, `Refused`, `Escalated` and `Withdrawn`; the note is
+appended to the row's Notes with today's date, so the row keeps its history.
+Anything that isn't `Pending` drops off `check-overdue`:
+```
+python main.py update-status --sheet-id YOUR_SHEET_ID \
+  --client-name "Jane Public" \
+  --target-url "https://example-mugshot-site.com/jane-public" \
+  --status Removed --note "Confirmed gone, screenshot on file"
+```
+
+See where one client stands — every request logged for them, with status
+and, for open requests with a real deadline, days remaining (negative once
+overdue):
+```
+python main.py client-report --sheet-id YOUR_SHEET_ID --client-name "Jane Public"
+```
+
 Look up registrant/hosting info for a single URL directly:
 ```
 python main.py lookup-owner --target-url "https://example-mugshot-site.com/jane-public"

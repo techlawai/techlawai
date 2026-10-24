@@ -400,3 +400,126 @@ class TestHeaderLayout:
         assert "Registrant Country" in labels
         assert "Hosting Country" in labels
         assert "Hosting Address" in labels
+
+
+class TestUpdateStatus:
+    def test_writes_status_and_a_dated_note(self):
+        worksheet = FakeWorksheet(records=[tracker_row()])
+
+        assert tracker.update_status(
+            worksheet, "Jane Public", "https://example-site.test/jane",
+            "removed", note="Confirmed by email", on=date(2026, 9, 1),
+        )
+
+        # First data row is sheet row 2; Status and Notes are columns I and J.
+        assert worksheet.updates == [
+            ("I2:J2", [["Removed", "2026-09-01: Removed -- Confirmed by email"]])
+        ]
+
+    def test_status_and_notes_columns_are_where_the_range_says(self):
+        assert tracker.HEADER[8:10] == ["Status", "Notes"]
+
+    def test_existing_notes_are_kept(self):
+        worksheet = FakeWorksheet(records=[tracker_row(Notes="Sent by email")])
+
+        tracker.update_status(
+            worksheet, "Jane Public", "https://example-site.test/jane",
+            "Refused", on=date(2026, 9, 1),
+        )
+
+        assert worksheet.updates[0][1] == [["Refused", "Sent by email; 2026-09-01: Refused"]]
+
+    def test_targets_the_most_recent_matching_row(self):
+        worksheet = FakeWorksheet(records=[
+            tracker_row(),
+            tracker_row(**{"Client Name": "Someone Else"}),
+            tracker_row(),
+        ])
+
+        tracker.update_status(
+            worksheet, "Jane Public", "https://example-site.test/jane", "Escalated",
+        )
+
+        assert worksheet.updates[0][0] == "I4:J4"
+
+    def test_client_name_match_ignores_case_and_spacing(self):
+        worksheet = FakeWorksheet(records=[tracker_row()])
+
+        assert tracker.update_status(
+            worksheet, "  jane public ", "https://example-site.test/jane", "Removed",
+        )
+
+    def test_another_clients_row_is_not_touched(self):
+        worksheet = FakeWorksheet(records=[tracker_row(**{"Client Name": "Someone Else"})])
+
+        assert not tracker.update_status(
+            worksheet, "Jane Public", "https://example-site.test/jane", "Removed",
+        )
+        assert worksheet.updates == []
+
+    def test_unknown_status_is_refused_before_writing(self):
+        worksheet = FakeWorksheet(records=[tracker_row()])
+
+        with pytest.raises(ValueError):
+            tracker.update_status(
+                worksheet, "Jane Public", "https://example-site.test/jane", "Done",
+            )
+        assert worksheet.updates == []
+
+    def test_moving_off_pending_takes_a_row_off_the_overdue_check(self):
+        # The point of update-status: a removed request stops showing overdue.
+        row = tracker_row(Deadline=(TODAY - timedelta(days=1)).isoformat())
+        status = tracker.validate_status("removed")
+
+        assert tracker.list_overdue(FakeWorksheet(records=[{**row, "Status": status}])) == []
+
+
+class TestClientReport:
+    def test_returns_only_that_clients_requests(self):
+        worksheet = FakeWorksheet(records=[
+            tracker_row(),
+            tracker_row(**{"Client Name": "Someone Else"}),
+            tracker_row(**{"Target URL": "https://other.test/jane"}),
+        ])
+
+        report = tracker.client_report(worksheet, "jane public")
+
+        assert [entry["Target URL"] for entry in report] == [
+            "https://example-site.test/jane",
+            "https://other.test/jane",
+        ]
+
+    def test_counts_days_to_a_pending_deadline(self):
+        worksheet = FakeWorksheet(records=[tracker_row(Deadline="2026-09-10")])
+
+        [entry] = tracker.client_report(worksheet, "Jane Public", today=date(2026, 9, 5))
+
+        assert entry["days_remaining"] == 5
+        assert entry["overdue"] is False
+
+    def test_flags_an_overdue_pending_request(self):
+        worksheet = FakeWorksheet(records=[tracker_row(Deadline="2026-09-01")])
+
+        [entry] = tracker.client_report(worksheet, "Jane Public", today=date(2026, 9, 5))
+
+        assert entry["days_remaining"] == -4
+        assert entry["overdue"] is True
+
+    @pytest.mark.parametrize("overrides", [
+        {"Deadline": "N/A (verify statute)"},
+        {"Status": "Removed", "Deadline": "2026-09-01"},
+    ])
+    def test_no_countdown_without_a_real_open_deadline(self, overrides):
+        worksheet = FakeWorksheet(records=[tracker_row(**overrides)])
+
+        [entry] = tracker.client_report(worksheet, "Jane Public", today=date(2026, 9, 5))
+
+        assert entry["days_remaining"] is None
+        assert entry["overdue"] is None
+
+    def test_entries_carry_the_request_fields(self):
+        worksheet = FakeWorksheet(records=[tracker_row()])
+
+        [entry] = tracker.client_report(worksheet, "Jane Public")
+
+        assert set(tracker.REQUEST_FIELDS) <= set(entry)
