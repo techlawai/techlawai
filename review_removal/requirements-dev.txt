@@ -1,0 +1,3 @@
+# The tests replace the browser and the API with fakes, so pytest alone runs
+# the suite.
+pytest>=8.0.0
