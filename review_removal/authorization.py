@@ -1,7 +1,7 @@
 """Client authorization to act on their Google Business Profile.
 
-Reporting, appealing and replying all happen from the client's own Google
-account, under their business's name. That needs their written go-ahead on
+Reporting, appealing and replying all happen from the client's Google
+account, or one they added as a Manager, under their business's name. That needs their written go-ahead on
 file first; the cli's report, appeal and reply commands refuse to run
 without the date they signed it.
 """
@@ -11,7 +11,8 @@ AUTHORIZATION_FORM_TEMPLATE = """\
 AUTHORIZATION TO MANAGE GOOGLE REVIEWS
 
 I, {client_name}, authorize {operator} to act on the Google Business Profile
-for {business_name}, using my own signed-in Google account, to:
+for {business_name}, using my own Google account or an account of theirs
+that I have added as a Manager of the profile, to:
 
   1. Report reviews to Google that appear to violate Google's published
      review policies, and check the status of those reports;
