@@ -1,0 +1,6 @@
+# Only needed for the automated steps. Import, screening, drafting and the
+# tracker use the standard library alone.
+google-auth>=2.28.0            # gbp_api.py: Business Profile API (fetch, reply)
+google-auth-oauthlib>=1.2.0    # gbp_api.py: one-time owner sign-in
+requests>=2.31.0               # google-auth's AuthorizedSession
+playwright>=1.45.0             # rmt_submit.py: Reviews Management Tool (report, appeal)
